@@ -7,7 +7,8 @@ No migrations run during deployment.
 
 ## Production settings
 
-In the **e-vote-react** Vercel project, open **Settings → Environment Variables**.
+In the **e-vote** Vercel project (the one serving `e-vote-react.vercel.app`), open
+**Settings → Environment Variables**.
 Import the private `.artifacts/vercel-production.env` file into **Production**.
 This file contains real credentials: do not commit, share or upload it anywhere
 except this project's private environment-variable settings.
