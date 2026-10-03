@@ -46,7 +46,8 @@ export const safeUser = (u: any) => ({
 
 async function providerSession(req: any, res: Response) {
   const client = (req.supabase ??= supabaseForRequest(req, res));
-  // getUser validates with Supabase Auth; getSession is only used after validation to obtain the same token's session ID.
+  // getUser calls Supabase Auth /user, which validates the signed token, user,
+  // and active session_id. Never replace it with a client-only getSession check.
   const { data: identity, error } = await client.auth.getUser();
   if (error || !identity.user || !identity.user.email_confirmed_at) return null;
   const { data } = await client.auth.getSession();
@@ -62,12 +63,15 @@ async function providerSession(req: any, res: Response) {
   } catch {
     return null;
   }
-  if (claims.sub !== identity.user.id || !claims.session_id) return null;
-  // A revoked session must not remain valid until its JWT expires. Roles never come from user_metadata.
-  const active = await db.$queryRaw<
-    any[]
-  >`SELECT id FROM evote."AuthSessionCheck" WHERE id = ${claims.session_id}::uuid AND user_id = ${identity.user.id}::uuid`;
-  if (!active.length) return null;
+  if (
+    claims.sub !== identity.user.id ||
+    !z.uuid().safeParse(claims.session_id).success ||
+    claims.session_id === "00000000-0000-0000-0000-000000000000"
+  )
+    return null;
+  // Managed auth.sessions uses RLS without application policies. Reading it
+  // through a caller-permission view silently hides every legitimate session.
+  // The provider check above and private app Session enforce revocation/expiry.
   return {
     client,
     identity: identity.user,

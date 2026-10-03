@@ -226,7 +226,7 @@ await check("Live Supabase Google sign-in", async () => {
     throw new Error("Google sign-in is disabled in the selected project.");
 });
 await check(
-  "Google OAuth redirects to Google with a real web client",
+  "Google OAuth web client and production fallback redirect are configured",
   async () => {
     const authorize = new URL(process.env.SUPABASE_URL + "/auth/v1/authorize");
     authorize.searchParams.set("provider", "google");
@@ -254,6 +254,39 @@ await check(
       google.searchParams.get("redirect_uri"),
       process.env.SUPABASE_URL + "/auth/v1/callback",
     );
+    if (origin.startsWith("https:")) {
+      const callback = new URL(process.env.SUPABASE_URL + "/auth/v1/callback");
+      callback.searchParams.set("state", google.searchParams.get("state")!);
+      callback.searchParams.set("error", "access_denied");
+      callback.searchParams.set(
+        "error_description",
+        "Configuration check cancelled before sign-in",
+      );
+      const cookie = response.headers
+        .getSetCookie()
+        .map((c) => c.split(";")[0])
+        .join("; ");
+      const cancelled = await fetch(callback, {
+        redirect: "manual",
+        headers: cookie ? { cookie } : {},
+        signal: AbortSignal.timeout(15000),
+      });
+      assert.equal(cancelled.status, 302);
+      assert.equal(
+        new URL(cancelled.headers.get("location")!).origin,
+        new URL(origin).origin,
+      );
+    }
+  },
+);
+await check(
+  "Authoritative Supabase user endpoint requires authentication",
+  async () => {
+    const response = await fetch(process.env.SUPABASE_URL + "/auth/v1/user", {
+      headers: { apikey: process.env.SUPABASE_PUBLISHABLE_KEY! },
+      signal: AbortSignal.timeout(15000),
+    });
+    assert.ok([401, 403].includes(response.status));
   },
 );
 await check(
@@ -307,22 +340,19 @@ if (!configurationIssues().length) {
     },
   );
   await check(
-    "Private session lookup preserves caller permissions",
+    "Runtime cannot read or change managed Auth sessions",
     async () => {
-      await db.$queryRaw`SELECT id,user_id FROM evote."AuthSessionCheck" WHERE false`;
-      const views = await db.$queryRaw<any[]>`SELECT c.reloptions,
-      has_table_privilege('anon',c.oid,'SELECT') AS anonymous_access,
-      has_table_privilege('authenticated',c.oid,'SELECT') AS browser_access,
-      has_table_privilege('evote_server',c.oid,'SELECT') AS backend_access,
-      has_table_privilege('evote_server',c.oid,'UPDATE') AS backend_update
-      FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
-      WHERE n.nspname='evote' AND c.relname='AuthSessionCheck' AND c.relkind='v'`;
-      assert.equal(views.length, 1);
-      assert.ok(views[0].reloptions.includes("security_invoker=true"));
-      assert.equal(views[0].anonymous_access, false);
-      assert.equal(views[0].browser_access, false);
-      assert.equal(views[0].backend_access, true);
-      assert.equal(views[0].backend_update, false);
+      const rights = await db.$queryRaw<any[]>`SELECT
+        has_column_privilege(current_user,'auth.sessions','id','SELECT') AS id_read,
+        has_column_privilege(current_user,'auth.sessions','user_id','SELECT') AS user_read,
+        has_table_privilege(current_user,'auth.sessions','UPDATE,DELETE,TRUNCATE') AS mutable`;
+      assert.equal(rights[0].id_read, false);
+      assert.equal(rights[0].user_read, false);
+      assert.equal(rights[0].mutable, false);
+      const views = await db.$queryRaw<
+        any[]
+      >`SELECT to_regclass('evote."AuthSessionCheck"') AS obsolete`;
+      assert.equal(views[0].obsolete, null);
     },
   );
   await check("Live registration capacity trigger is installed", async () => {

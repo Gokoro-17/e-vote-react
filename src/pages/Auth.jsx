@@ -146,7 +146,13 @@ export function Auth({ register = false }) {
           <Feedback error="Account access is awaiting the administrator’s Supabase configuration." />
         )}
         {params.has("error") && (
-          <Feedback error="The sign-in link could not be completed. Please try again." />
+          <Feedback
+            error={
+              params.get("error") === "access_denied"
+                ? "Sign-in was cancelled. You can try again or sign in with email."
+                : "The sign-in link could not be completed. Please try again."
+            }
+          />
         )}
         {params.has("reset") && (
           <Feedback message="Password updated. Sign in with your new password." />

@@ -6,6 +6,7 @@ import {
   Routes,
   Navigate,
   useLocation,
+  useNavigate,
 } from "react-router-dom";
 import {
   Vote as VoteIcon,
@@ -49,8 +50,20 @@ export default function App() {
     [open, setOpen] = useState(false),
     [error, setError] = useState(""),
     location = useLocation(),
+    navigate = useNavigate(),
     menuButton = useRef(null),
     navRef = useRef(null);
+  useEffect(() => {
+    const providerError = new URLSearchParams(location.hash.slice(1)).get(
+      "error",
+    );
+    if (providerError)
+      navigate(
+        "/login?error=" +
+          (providerError === "access_denied" ? "access_denied" : "provider"),
+        { replace: true },
+      );
+  }, [location.hash, navigate]);
   useEffect(() => {
     setOpen(false);
     setError("");
