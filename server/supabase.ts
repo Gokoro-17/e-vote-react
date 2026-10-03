@@ -68,6 +68,21 @@ export function configurationIssues() {
     "BALLOT_ENCRYPTION_KEY",
   ])
     if (!process.env[name]) issues.push(name);
+  const dataKey = Buffer.from(process.env.DATA_ENCRYPTION_KEY || "", "base64");
+  const ballotKey = Buffer.from(
+    process.env.BALLOT_ENCRYPTION_KEY || "",
+    "base64",
+  );
+  if (process.env.DATA_ENCRYPTION_KEY && dataKey.length !== 32)
+    issues.push("DATA_ENCRYPTION_KEY must be a 32-byte base64 key");
+  if (process.env.BALLOT_ENCRYPTION_KEY && ballotKey.length !== 32)
+    issues.push("BALLOT_ENCRYPTION_KEY must be a 32-byte base64 key");
+  if (
+    dataKey.length === 32 &&
+    ballotKey.length === 32 &&
+    dataKey.equals(ballotKey)
+  )
+    issues.push("Document and ballot encryption keys must be separate");
   if (
     process.env.SUPABASE_URL &&
     process.env.SUPABASE_URL !== `https://${projectRef}.supabase.co`
@@ -139,6 +154,26 @@ export function supabaseForRequest(req: Request, res: Response) {
       },
     },
   );
+}
+export function clearAuthCookies(req: Request, res: Response) {
+  const names = new Set([
+    ...Object.keys(req.cookies || {}).filter((name) =>
+      name.startsWith("evote-auth"),
+    ),
+    "evote-auth",
+    "evote-auth-code-verifier",
+    "evote-recovery",
+    "evote-recovery-intent",
+  ]);
+  for (const name of names) {
+    res.clearCookie(name, {
+      path: "/",
+      httpOnly: true,
+      secure: production,
+      sameSite: "lax",
+    });
+    delete req.cookies?.[name];
+  }
 }
 let privileged: ReturnType<typeof createClient> | undefined;
 export function supabaseAdmin() {

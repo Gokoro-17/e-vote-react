@@ -7,10 +7,20 @@ import {
   configurationIssues,
   appOrigin,
   authAvailability,
+  clearAuthCookies,
 } from "./supabase.js";
 
 function fail(message: string, status = 400): never {
   throw Object.assign(new Error(message), { status });
+}
+function checkMailError(error: { status?: number; code?: string } | null) {
+  if (!error) return;
+  if (error.status === 429)
+    fail("Please wait before requesting another email.", 429);
+  // Preserve the same response for unknown and already-confirmed accounts.
+  if (["user_not_found", "email_not_confirmed"].includes(error.code || ""))
+    return;
+  fail("We couldn't send the email right now. Please try again shortly.", 503);
 }
 const route =
   (fn: (req: any, res: Response, next: NextFunction) => Promise<any>) =>
@@ -199,13 +209,16 @@ export function mountAuth(
           data: { full_name: input.name },
         },
       });
-      if (error)
+      if (error) {
+        if (!error.status || error.status >= 500 || error.status === 429)
+          checkMailError(error);
         fail(
           error.code === "over_email_send_rate_limit"
             ? "Please wait before requesting another confirmation email."
             : "Unable to create this account. Try signing in or resetting your password.",
           400,
         );
+      }
       if (data.session) {
         await client.auth.signOut();
         fail(
@@ -247,12 +260,10 @@ export function mountAuth(
             },
           });
       }
-      res
-        .status(201)
-        .json({
-          message:
-            "Check your inbox and confirm your email to finish creating your account.",
-        });
+      res.status(201).json({
+        message:
+          "Check your inbox and confirm your email to finish creating your account.",
+      });
     }),
   );
   app.post(
@@ -275,9 +286,19 @@ export function mountAuth(
       const client = (req.supabase ??= supabaseForRequest(req, res));
       const { error } = await client.auth.signInWithPassword(input);
       if (error) {
+        if (error.status === 429)
+          fail("Too many sign-in attempts. Please try again shortly.", 429);
+        if (!error.status || error.status >= 500)
+          fail(
+            "Sign-in is temporarily unavailable. Please try again shortly.",
+            503,
+          );
         await db.securityEvent.create({
           data: {
-            type: "LOGIN_FAILURE",
+            type:
+              error.code === "email_not_confirmed"
+                ? "LOGIN_UNCONFIRMED"
+                : "LOGIN_FAILURE",
             metadata: {
               emailHash: digest(input.email),
               ipHash: digest(req.ip || ""),
@@ -408,8 +429,7 @@ export function mountAuth(
         email: input.email,
         options: { emailRedirectTo: `${appOrigin}/api/auth/callback` },
       });
-      if (error && error.status === 429)
-        fail("Please wait before requesting another email.", 429);
+      checkMailError(error);
       res.json({
         message: "If confirmation is needed, a new email will arrive shortly.",
       });
@@ -422,9 +442,10 @@ export function mountAuth(
       await bot(req);
       const input = z.object({ email }).parse(req.body);
       const client = (req.supabase ??= supabaseForRequest(req, res));
-      await client.auth.resetPasswordForEmail(input.email, {
+      const { error } = await client.auth.resetPasswordForEmail(input.email, {
         redirectTo: `${appOrigin}/api/auth/callback`,
       });
+      checkMailError(error);
       res.cookie(
         "evote-recovery-intent",
         encrypt(
@@ -469,10 +490,17 @@ export function mountAuth(
       });
       if (error)
         fail("Unable to update the password. Use a different strong password.");
-      await req.auth.client.auth.signOut({ scope: "global" });
+      const { error: signOutError } = await req.auth.client.auth.signOut({
+        scope: "global",
+      });
       await db.session.deleteMany({ where: { userId: u.id } });
       await logAudit(u.id, "PASSWORD_RESET");
-      res.clearCookie("evote-recovery", { path: "/" });
+      clearAuthCookies(req, res);
+      if (signOutError && ![401, 403, 404].includes(signOutError.status || 0))
+        fail(
+          "Your password changed and this browser is signed out. Sign in again to review other sessions in your account settings.",
+          503,
+        );
       res.json({
         message: "Password updated. Sign in with your new password.",
         csrf: null,
@@ -483,12 +511,15 @@ export function mountAuth(
   app.post(
     "/api/auth/logout",
     route(async (req, res) => {
+      const client = (req.supabase ??= supabaseForRequest(req, res));
+      const { error } = await client.auth.signOut({ scope: "local" });
+      if (error && ![401, 403, 404].includes(error.status || 0))
+        fail("We couldn't finish signing out. Please try again.", 503);
       if (req.session) {
         await db.session.deleteMany({ where: { id: req.session.id } });
         await logAudit(req.user.id, "LOGOUT");
       }
-      const client = (req.supabase ??= supabaseForRequest(req, res));
-      await client.auth.signOut({ scope: "local" });
+      clearAuthCookies(req, res);
       res.json({ ok: true, csrf: null, user: null });
     }),
   );

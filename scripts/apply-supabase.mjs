@@ -28,6 +28,17 @@ try {
     throw new Error(
       "Use the direct connection or session pooler on port 5432 for migration.",
     );
+  const schedule = process.argv.includes("--schedule");
+  const workerOrigin = process.env.APP_ORIGIN || "";
+  if (
+    schedule &&
+    (!/^https:\/\/[^/]+$/.test(workerOrigin) ||
+      new URL(workerOrigin).hostname.endsWith("localhost") ||
+      (process.env.WORKER_SECRET || "").length < 32)
+  )
+    throw new Error(
+      "Scheduling requires an HTTPS APP_ORIGIN and a private WORKER_SECRET.",
+    );
   for (const key of [
     "schema",
     "pgbouncer",
@@ -98,10 +109,45 @@ try {
     );
     count++;
   }
+  if (schedule) {
+    const existingSecret = await client.query(
+      "SELECT id FROM vault.secrets WHERE name='evote_worker_token'",
+    );
+    if (existingSecret.rows.length)
+      await client.query("SELECT vault.update_secret($1::uuid,$2)", [
+        existingSecret.rows[0].id,
+        process.env.WORKER_SECRET,
+      ]);
+    else
+      await client.query(
+        "SELECT vault.create_secret($1,'evote_worker_token','E-Vote scheduled maintenance bearer token')",
+        [process.env.WORKER_SECRET],
+      );
+    const workerUrl = workerOrigin + "/api/internal/maintenance";
+    // The URL is validated above. Keep the bearer token out of cron command text.
+    const command = `SELECT net.http_post(url := '${workerUrl.replaceAll("'", "''")}',
+      headers := jsonb_build_object('Content-Type','application/json','Authorization',
+        'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name='evote_worker_token')),
+      body := '{}'::jsonb, timeout_milliseconds := 55000);`;
+    await client.query(
+      "SELECT cron.schedule('evote-maintenance','* * * * *',$1)",
+      [command],
+    );
+    await client.query(
+      "SELECT cron.schedule('evote-maintenance-history','0 0 * * *',$1)",
+      [
+        "DELETE FROM cron.job_run_details WHERE jobid IN (SELECT jobid FROM cron.job WHERE jobname IN ('evote-maintenance','evote-maintenance-history')) AND end_time < now() - interval '7 days'",
+      ],
+    );
+  }
   await client.query("COMMIT");
   console.log(
     `${count} reviewed Supabase migration(s) applied. No user or election records were seeded.`,
   );
+  if (schedule)
+    console.log(
+      "Supabase maintenance scheduled every minute; bearer token is protected in Vault.",
+    );
 } catch (e) {
   if (opened) await client.query("ROLLBACK").catch(() => {});
   const known = new Set([
@@ -112,6 +158,7 @@ try {
     "Expected the reviewed application baseline migration.",
     "An existing evote schema requires a separate migration review.",
     "Existing application migration differs.",
+    "Scheduling requires an HTTPS APP_ORIGIN and a private WORKER_SECRET.",
   ]);
   console.error(
     "Migration stopped: " +

@@ -208,16 +208,20 @@ export async function processDeletionJob(job: any) {
     });
   }
 }
-export async function maintenance() {
+export async function maintenance(deadline = Infinity) {
   for (const job of await db.deletionJob.findMany({
     where: { completedAt: null, attempts: { lt: 20 } },
     take: 20,
-  }))
+  })) {
+    if (Date.now() + 20000 >= deadline) return;
     await processDeletionJob(job);
+  }
   const expired = await db.document.findMany({
     where: { expiresAt: { lt: new Date() } },
+    take: 20,
   });
   for (const d of expired) {
+    if (Date.now() + 20000 >= deadline) return;
     await removeDocument(d.objectKey);
     await db.document.delete({ where: { id: d.id } });
     await logAudit("SYSTEM", "DOCUMENT_EXPIRED");
@@ -234,6 +238,7 @@ export async function maintenance() {
     },
   });
   for (const e of elections) {
+    if (Date.now() + 20000 >= deadline) return;
     let status = e.status;
     if (
       status === "VOTING_UPCOMING" &&
@@ -303,6 +308,7 @@ export async function maintenance() {
     orderBy: { createdAt: "asc" },
     take: 10,
   })) {
+    if (Date.now() + 20000 >= deadline) return;
     await db.$transaction(
       async (tx) => {
         await tx.$queryRaw`SELECT id FROM evote."NotificationCampaign" WHERE id=${campaign.id} FOR UPDATE`;
@@ -332,48 +338,71 @@ export async function maintenance() {
     );
   }
   if (process.env.SMTP_URL) {
-    const mailer = nodemailer.createTransport(process.env.SMTP_URL);
-    for (const m of await db.mailOutbox.findMany({
-      where: {
-        sentAt: null,
-        attempts: { lt: 5 },
-        OR: [
-          { claimedAt: null },
-          { claimedAt: { lt: new Date(Date.now() - 5 * 60000) } },
-        ],
-      },
-      take: 20,
-      orderBy: { createdAt: "asc" },
-    })) {
-      const claim = await db.mailOutbox.updateMany({
+    const mailer = nodemailer.createTransport({
+      url: process.env.SMTP_URL,
+      pool: true,
+      maxConnections: 1,
+      connectionTimeout: 5000,
+      greetingTimeout: 5000,
+      socketTimeout: 8000,
+    });
+    try {
+      for (const m of await db.mailOutbox.findMany({
         where: {
-          id: m.id,
           sentAt: null,
+          attempts: { lt: 5 },
           OR: [
             { claimedAt: null },
             { claimedAt: { lt: new Date(Date.now() - 5 * 60000) } },
           ],
         },
-        data: { claimedAt: new Date() },
-      });
-      if (!claim.count) continue;
-      try {
-        await mailer.sendMail({
-          from: process.env.MAIL_FROM,
-          to: m.to,
-          subject: m.subject,
-          text: decrypt(m.encryptedBody).toString(),
+        take: 20,
+        orderBy: { createdAt: "asc" },
+      })) {
+        if (Date.now() + 20000 >= deadline) return;
+        const claim = await db.mailOutbox.updateMany({
+          where: {
+            id: m.id,
+            sentAt: null,
+            OR: [
+              { claimedAt: null },
+              { claimedAt: { lt: new Date(Date.now() - 5 * 60000) } },
+            ],
+          },
+          data: { claimedAt: new Date() },
         });
-        await db.mailOutbox.update({
-          where: { id: m.id },
-          data: { sentAt: new Date(), encryptedBody: encrypt("DELIVERED") },
-        });
-      } catch {
-        await db.mailOutbox.update({
-          where: { id: m.id },
-          data: { attempts: { increment: 1 }, claimedAt: null },
-        });
+        if (!claim.count) continue;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await Promise.race([
+            mailer.sendMail({
+              from: process.env.MAIL_FROM,
+              to: m.to,
+              subject: m.subject,
+              text: decrypt(m.encryptedBody).toString(),
+            }),
+            new Promise<never>((_, reject) => {
+              timer = setTimeout(() => {
+                mailer.close();
+                reject(new Error("Email delivery timed out."));
+              }, 15000);
+            }),
+          ]);
+          await db.mailOutbox.update({
+            where: { id: m.id },
+            data: { sentAt: new Date(), encryptedBody: encrypt("DELIVERED") },
+          });
+        } catch {
+          await db.mailOutbox.update({
+            where: { id: m.id },
+            data: { attempts: { increment: 1 }, claimedAt: null },
+          });
+        } finally {
+          if (timer) clearTimeout(timer);
+        }
       }
+    } finally {
+      mailer.close();
     }
   }
 }

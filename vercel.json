@@ -7,7 +7,7 @@
     "api/index.ts": {
       "maxDuration": 60,
       "includeFiles": "supabase/certs/*.crt",
-      "excludeFiles": "{.env,.env.*,server/*.test.ts,.artifacts/**,.backups/**,private-storage/**}"
+      "excludeFiles": "{.env,.env.*,.vercel/**,server/*.test.ts,.artifacts/**,.backups/**,private-storage/**}"
     }
   },
   "rewrites": [

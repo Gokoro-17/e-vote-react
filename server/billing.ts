@@ -2,6 +2,7 @@ import express, { Express, NextFunction, Request, Response } from "express";
 import { createHmac, timingSafeEqual, randomUUID } from "node:crypto";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { db, serializable, audit, digest } from "./platform.js";
 import { requireUser } from "./auth.js";
 import { requireConfiguration } from "./supabase.js";
@@ -45,6 +46,9 @@ export async function paystack(path: string, body?: unknown) {
   if (!/^sk_live_/.test(process.env.PAYSTACK_SECRET_KEY || ""))
     fail("Subscription checkout is not available yet.", 503);
   let response: globalThis.Response;
+  const remaining = (billingDeadline.getStore() ?? Infinity) - Date.now();
+  if (remaining < 1000)
+    fail("Billing maintenance will continue on its next pass.", 503);
   try {
     response = await fetch("https://api.paystack.co" + path, {
       method: body ? "POST" : "GET",
@@ -53,7 +57,7 @@ export async function paystack(path: string, body?: unknown) {
         "Content-Type": "application/json",
       },
       body: body ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(Math.min(8000, remaining)),
     });
   } catch {
     return fail("The payment provider is unavailable. Please try again.", 502);
@@ -302,7 +306,12 @@ async function syncSubscription(code: string) {
   });
   return { stored, provider };
 }
-export async function processBillingMaintenance() {
+const billingDeadline = new AsyncLocalStorage<number>();
+export async function processBillingMaintenance(deadline = Infinity) {
+  await billingDeadline.run(deadline, () => billingMaintenance(deadline));
+}
+async function billingMaintenance(deadline: number) {
+  if (Date.now() + 20000 >= deadline) return;
   if (!/^sk_live_/.test(process.env.PAYSTACK_SECRET_KEY || "")) return;
   await processBillingCancellations();
   // Reconcile completed initial checkouts even if the subscription webhook was missed.
@@ -314,6 +323,7 @@ export async function processBillingMaintenance() {
     },
     take: 5,
   })) {
+    if (Date.now() + 20000 >= deadline) return;
     try {
       const customer = await paystack(
         "/customer/" + encodeURIComponent(sub.customerCode!),
@@ -345,6 +355,7 @@ export async function processBillingMaintenance() {
     orderBy: { lastCheckedAt: { sort: "asc", nulls: "first" } },
     take: 3,
   })) {
+    if (Date.now() + 20000 >= deadline) return;
     try {
       const { provider } = await syncSubscription(sub.providerCode!);
       const invoice = provider.most_recent_invoice;
@@ -375,6 +386,7 @@ async function processBillingCancellations() {
     },
     take: 10,
   })) {
+    if (Date.now() + 20000 >= (billingDeadline.getStore() ?? Infinity)) return;
     try {
       const provider = await paystack(
         "/subscription/" + encodeURIComponent(sub.providerCode!),

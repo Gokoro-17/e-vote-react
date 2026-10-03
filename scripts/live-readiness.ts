@@ -1,5 +1,7 @@
 import "dotenv/config";
 import assert from "node:assert/strict";
+import { createHash, randomBytes } from "node:crypto";
+import { createClient } from "@supabase/supabase-js";
 import { db } from "../server/platform.js";
 import { configurationIssues, projectRef } from "../server/supabase.js";
 const origin =
@@ -45,6 +47,94 @@ await check("Live session endpoint and secure API headers", async () => {
   assert.equal(body.user, null);
   assert.equal(body.csrf, null);
 });
+await check("Public configuration exposes no server secrets", async () => {
+  const response = await request("/public/config");
+  assert.equal(response.status, 200);
+  const text = await response.text();
+  const body = JSON.parse(text);
+  assert.equal(body.configured, true);
+  assert.equal(body.googleEnabled, true);
+  assert.equal(body.captchaSiteKey, process.env.TURNSTILE_SITE_KEY);
+  for (const key of [
+    "SUPABASE_SECRET_KEY",
+    "TURNSTILE_SECRET",
+    "DATA_ENCRYPTION_KEY",
+    "BALLOT_ENCRYPTION_KEY",
+    "SMTP_URL",
+    "DATABASE_URL",
+    "WORKER_SECRET",
+  ])
+    if (process.env[key]) assert.ok(!text.includes(process.env[key]!));
+});
+await check("Unauthenticated scheduler invocation is rejected", async () => {
+  const response = await request("/internal/maintenance", { method: "POST" });
+  assert.equal(response.status, 401);
+});
+await check(
+  "Google and email login require a real bot-protection challenge",
+  async () => {
+    const browserOrigin = ["localhost", "127.0.0.1"].includes(
+      new URL(origin).hostname,
+    )
+      ? process.env.APP_ORIGIN!
+      : new URL(origin).origin;
+    for (const path of ["/auth/google", "/auth/login"]) {
+      const response = await request(path, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: browserOrigin },
+        body: "{}",
+      });
+      assert.equal(response.status, 403);
+      assert.match(((await response.json()) as any).error, /bot protection/i);
+    }
+  },
+);
+await check(
+  "Sign-out clears default authentication and recovery cookies",
+  async () => {
+    const browserOrigin = ["localhost", "127.0.0.1"].includes(
+      new URL(origin).hostname,
+    )
+      ? process.env.APP_ORIGIN!
+      : new URL(origin).origin;
+    const response = await request("/auth/logout", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: browserOrigin },
+      body: "{}",
+    });
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as any;
+    assert.equal(body.user, null);
+    assert.equal(body.csrf, null);
+    const cookies = response.headers.getSetCookie();
+    for (const name of [
+      "evote-auth",
+      "evote-auth-code-verifier",
+      "evote-recovery",
+      "evote-recovery-intent",
+    ]) {
+      const cookie = cookies.find((c) => c.startsWith(name + "="));
+      assert.ok(cookie);
+      assert.match(cookie, /HttpOnly/i);
+      assert.match(cookie, /Expires=Thu, 01 Jan 1970/i);
+      if (origin.startsWith("https:")) assert.match(cookie, /Secure/i);
+    }
+  },
+);
+await check(
+  "Public election, organization and statistics endpoints respond",
+  async () => {
+    for (const path of ["/elections", "/organizations", "/public/stats"]) {
+      const response = await request(path);
+      assert.equal(response.status, 200);
+      assert.match(
+        response.headers.get("content-type") || "",
+        /application\/json/,
+      );
+      await response.json();
+    }
+  },
+);
 await check(
   "Live subscription catalog has the approved NGN prices and capacities",
   async () => {
@@ -135,23 +225,106 @@ await check("Live Supabase Google sign-in", async () => {
   if (providerSettings?.external?.google !== true)
     throw new Error("Google sign-in is disabled in the selected project.");
 });
+await check(
+  "Google OAuth redirects to Google with a real web client",
+  async () => {
+    const authorize = new URL(process.env.SUPABASE_URL + "/auth/v1/authorize");
+    authorize.searchParams.set("provider", "google");
+    authorize.searchParams.set(
+      "redirect_to",
+      new URL(origin).origin + "/api/auth/callback",
+    );
+    authorize.searchParams.set(
+      "code_challenge",
+      createHash("sha256").update(randomBytes(32)).digest("base64url"),
+    );
+    authorize.searchParams.set("code_challenge_method", "s256");
+    const response = await fetch(authorize, {
+      redirect: "manual",
+      signal: AbortSignal.timeout(15000),
+    });
+    assert.equal(response.status, 302);
+    const google = new URL(response.headers.get("location")!);
+    assert.equal(google.hostname, "accounts.google.com");
+    assert.match(
+      google.searchParams.get("client_id") || "",
+      /^\d+-[a-z0-9]+\.apps\.googleusercontent\.com$/,
+    );
+    assert.equal(
+      google.searchParams.get("redirect_uri"),
+      process.env.SUPABASE_URL + "/auth/v1/callback",
+    );
+  },
+);
+await check(
+  "Identity documents use a private, size-limited storage bucket",
+  async () => {
+    const client = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_SECRET_KEY!,
+      { auth: { persistSession: false, autoRefreshToken: false } },
+    );
+    const { data, error } = await client.storage.listBuckets();
+    assert.equal(error, null);
+    const bucket = data!.find((b) => b.id === "verification-documents");
+    assert.ok(bucket);
+    assert.equal(bucket.public, false);
+    assert.equal(bucket.file_size_limit, 7340032);
+    assert.deepEqual(bucket.allowed_mime_types, ["application/octet-stream"]);
+  },
+);
 if (!configurationIssues().length) {
-  await check("Private session lookup preserves caller permissions", async () => {
-    await db.$queryRaw`SELECT id,user_id FROM evote."AuthSessionCheck" WHERE false`;
-    const views = await db.$queryRaw<any[]>`SELECT c.reloptions,
+  await check(
+    "Application database login cannot bypass RLS or change roles",
+    async () => {
+      const roles = await db.$queryRaw<
+        any[]
+      >`SELECT current_user AS name,rolsuper,rolbypassrls,rolcreaterole,rolcreatedb FROM pg_roles WHERE rolname=current_user`;
+      assert.equal(roles[0]?.name, "evote_runtime");
+      for (const flag of [
+        "rolsuper",
+        "rolbypassrls",
+        "rolcreaterole",
+        "rolcreatedb",
+      ])
+        assert.equal(roles[0][flag], false);
+    },
+  );
+  await check(
+    "Runtime cannot modify stored ballots, receipts or audit history",
+    async () => {
+      for (const table of [
+        "Ballot",
+        "VoteReceipt",
+        "AuditLog",
+        "ElectionResult",
+      ]) {
+        const rights = await db.$queryRaw<
+          any[]
+        >`SELECT has_table_privilege(current_user,${'evote."' + table + '"'},'UPDATE,DELETE,TRUNCATE') AS mutable`;
+        assert.equal(rights[0]?.mutable, false);
+      }
+    },
+  );
+  await check(
+    "Private session lookup preserves caller permissions",
+    async () => {
+      await db.$queryRaw`SELECT id,user_id FROM evote."AuthSessionCheck" WHERE false`;
+      const views = await db.$queryRaw<any[]>`SELECT c.reloptions,
       has_table_privilege('anon',c.oid,'SELECT') AS anonymous_access,
       has_table_privilege('authenticated',c.oid,'SELECT') AS browser_access,
       has_table_privilege('evote_server',c.oid,'SELECT') AS backend_access,
       has_table_privilege('evote_server',c.oid,'UPDATE') AS backend_update
       FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
       WHERE n.nspname='evote' AND c.relname='AuthSessionCheck' AND c.relkind='v'`;
-    assert.equal(views.length, 1);
-    assert.ok(views[0].reloptions.includes("security_invoker=true"));
-    assert.equal(views[0].anonymous_access, false);
-    assert.equal(views[0].browser_access, false);
-    assert.equal(views[0].backend_access, true);
-    assert.equal(views[0].backend_update, false);
-  });
+      assert.equal(views.length, 1);
+      assert.ok(views[0].reloptions.includes("security_invoker=true"));
+      assert.equal(views[0].anonymous_access, false);
+      assert.equal(views[0].browser_access, false);
+      assert.equal(views[0].backend_access, true);
+      assert.equal(views[0].backend_update, false);
+    },
+  );
   await check("Live registration capacity trigger is installed", async () => {
     const functions = await db.$queryRaw<
       any[]
@@ -198,6 +371,6 @@ if (!configurationIssues().length) {
 }
 await db.$disconnect();
 console.log(
-  `${checks} read-only live checks passed. No accounts, organizations, documents, elections or ballots were created. Target: ${projectRef}.`,
+  `${checks} live readiness checks passed. No accounts, organizations, documents, elections or ballots were created. Requests may create operational rate/security metadata. Target: ${projectRef}.`,
 );
 if (blocked) process.exitCode = 1;

@@ -105,6 +105,7 @@ export function ActionForm({
       className={className}
       onSubmit={async (ev) => {
         ev.preventDefault();
+        if (busy) return;
         const form = ev.currentTarget,
           data = Object.fromEntries(new FormData(form));
         setBusy(true);
@@ -117,6 +118,7 @@ export function ActionForm({
         } catch (e) {
           setError(e.message);
         } finally {
+          form.dispatchEvent(new Event("evote:captcha-reset"));
           setBusy(false);
         }
       }}
@@ -140,6 +142,14 @@ export function Captcha() {
   useEffect(() => {
     let active = true,
       widget;
+    const form = ref.current?.closest("form");
+    const reset = () => {
+      setValue("");
+      setError("");
+      if (widget !== undefined && window.turnstile)
+        window.turnstile.reset(widget);
+    };
+    form?.addEventListener("evote:captcha-reset", reset);
     api("/public/config")
       .then(async (config) => {
         if (!config.captchaSiteKey || !active) return;
@@ -157,10 +167,15 @@ export function Captcha() {
           widget = window.turnstile.render(ref.current, {
             sitekey: config.captchaSiteKey,
             size: "flexible",
-            callback: setValue,
+            callback: (token) => {
+              setValue(token);
+              setError("");
+            },
             "expired-callback": () => setValue(""),
-            "error-callback": () =>
-              setError("The security check could not load. Please refresh."),
+            "error-callback": () => {
+              setValue("");
+              setError("The security check could not load. Please refresh.");
+            },
           });
       })
       .catch(
@@ -170,6 +185,7 @@ export function Captcha() {
       );
     return () => {
       active = false;
+      form?.removeEventListener("evote:captcha-reset", reset);
       if (widget !== undefined && window.turnstile)
         window.turnstile.remove(widget);
     };

@@ -72,6 +72,7 @@ export function Auth({ register = false }) {
     } catch (e) {
       setGoogleError(e.message);
       setGoogleBusy(false);
+      form.dispatchEvent(new Event("evote:captcha-reset"));
     }
   };
   return (
@@ -114,6 +115,8 @@ export function Auth({ register = false }) {
         className="f auth-panel"
         success=""
         onSubmit={async (f) => {
+          if (googleBusy)
+            throw new Error("Google sign-in is opening. Please wait.");
           const result = await auth(register ? "register" : "login", {
             ...f,
             consent: f.consent === "on",
@@ -144,6 +147,9 @@ export function Auth({ register = false }) {
         )}
         {params.has("error") && (
           <Feedback error="The sign-in link could not be completed. Please try again." />
+        )}
+        {params.has("reset") && (
+          <Feedback message="Password updated. Sign in with your new password." />
         )}
         <button
           type="button"
@@ -206,7 +212,7 @@ export function Auth({ register = false }) {
           </Link>
         )}
         <Captcha />
-        <button className="btn btn-full">
+        <button className="btn btn-full" disabled={googleBusy}>
           {register ? "Create account" : "Sign in"} <ArrowRight size={17} />
         </button>
         <p className="auth-switch">
@@ -236,10 +242,11 @@ export function VerifyEmail() {
       <PageHeading eyebrow="EMAIL CONFIRMATION" title="Check your inbox.">
         Confirm your email to finish creating your account. Open the
         confirmation link in this browser, or enter the code if your email
-        includes one.
+        includes one. If you confirmed in another browser, sign in with your
+        email and password here.
       </PageHeading>
       {params.has("expired") && (
-        <Feedback error="The confirmation link expired or was opened in a different browser. Request a new email below." />
+        <Feedback error="We couldn’t finish this sign-in link. If your email is already confirmed, sign in with your password. Otherwise, request a new confirmation email below." />
       )}
       <ActionForm
         onSubmit={async (f) => {
@@ -345,8 +352,11 @@ export function ResetPassword() {
         onSubmit={async (f) => {
           if (f.password !== f.confirm)
             throw new Error("The passwords do not match.");
-          await api("/auth/reset-password", { password: f.password });
-          await refresh();
+          try {
+            await api("/auth/reset-password", { password: f.password });
+          } finally {
+            await refresh();
+          }
           go("/login?reset=1");
         }}
       >

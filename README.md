@@ -2,7 +2,7 @@
 
 A React voting workspace with a TypeScript REST backend and Supabase PostgreSQL, Auth, and Storage. Organization permissions, eligibility, schedules, candidate rules, and participation limits are validated on the server.
 
-**Latest local verification (2026-10-03):** both reviewed Supabase migrations are applied, the database-backed API is healthy, and 13 live readiness checks passed, including private-schema access controls, voter-capacity enforcement, and ballot/identity separation. Email confirmation is enabled. Google OAuth, application email delivery, Paystack, and Turnstile still need provider configuration. Real signup/email delivery, an OAuth round trip, ballot submission, device rendering, and full security acceptance remain unverified. No application data is seeded.
+**Latest verification (2026-10-03):** 31 application tables are present in the private `evote` schema, with all four reviewed migrations applied. Select `evote` in Supabase Table Editor. The API is healthy, and 24 live readiness checks passed, including restricted database permissions, bot protection, sign-out cookie cleanup and ballot/identity separation. Email confirmation, Google OAuth, SMTP, Turnstile and required deployment settings are configured. Supabase Cron drives protected maintenance. Real-account email/auth/recovery/voting acceptance, paid Paystack setup, device rendering and full security acceptance remain unverified. No application data is seeded.
 
 The 45-section requirement audit is in [docs/IMPLEMENTATION_AUDIT.md](docs/IMPLEMENTATION_AUDIT.md). Explicit external requirements, optional features, and remaining limitations are marked there.
 
@@ -149,7 +149,7 @@ npm.cmd run test:live
 
 auth:check only reads provider and bucket settings and does not print keys. test:live checks real running API headers, unauthenticated access, Origin protection, provider settings, private schema RLS and ballot columns. It exits unsuccessfully if setup/checks are incomplete. It never creates voters or casts ballots.
 
-The pure calculation/cryptography test source is retained for CI under npm.cmd test. It does not seed a database. The previous fake-account integration writers were removed. Per your instruction, this change is being verified with live read-only checks and build/type checks; real-account workflow acceptance is described in [docs/LIVE_ACCEPTANCE.md](docs/LIVE_ACCEPTANCE.md).
+The pure calculation/cryptography test source is retained for CI under npm.cmd test. It does not seed a database. The previous fake-account integration writers were removed. Per your instruction, this change is being verified with live readiness checks and build/type checks; real-account workflow acceptance is described in [docs/LIVE_ACCEPTANCE.md](docs/LIVE_ACCEPTANCE.md).
 
 Browser control is unavailable in this session. Responsive CSS was rebuilt for small mobile, tablet and desktop layouts, but rendered device/screenshots/accessibility testing is still required before claiming universal compatibility.
 
@@ -157,11 +157,11 @@ Browser control is unavailable in this session. Responsive CSS was rebuilt for s
 
 The frontend is a Vite build, and the backend requires a Node runtime. A static frontend deployment must proxy /api to the same-origin backend. APP_ORIGIN must be the exact public origin; OAuth and cookie endpoints must share it.
 
-Vercel deployment is configured in `vercel.json` and `api/index.ts`, so the Vite website and Express API are deployed together. Follow [docs/VERCEL.md](docs/VERCEL.md) for private environment-variable import, production Auth URLs and scheduled-worker setup.
+Vercel deployment is configured in `vercel.json` and `api/index.ts`, so the Vite website and Express API are deployed together. Follow [docs/VERCEL.md](docs/VERCEL.md) for production environment variables, Auth URLs and scheduled-worker setup.
 
 Production requests require HTTPS APP_ORIGIN, app SMTP and both Turnstile credentials. Missing configuration returns a JSON setup response and blocks sensitive operations. Set HOST as appropriate for a persistent API host and TRUST_PROXY only when the deployment really has a trusted proxy. Do not expose the backend across unrestricted proxy chains.
 
-The persistent API runs cleanup/scheduling/outbox maintenance every 30 seconds. For a serverless or sleeping host, schedule **npm.cmd run worker:once** using a protected worker/cron runner. Document expiration, notification campaigns, account deletion cleanup and scheduled election transitions depend on this process.
+The persistent API runs cleanup/scheduling/outbox maintenance every 30 seconds. Supabase Cron invokes the protected production maintenance endpoint every minute; a database lease prevents overlapping workers. Provision or update it with **npm.cmd run db:migrate -- --schedule**, using the production HTTPS APP_ORIGIN and the same private WORKER_SECRET as Vercel. The scheduler token is stored in Vault. **npm.cmd run worker:once** is also available for a dedicated runner. Document expiration, notification campaigns, account deletion cleanup and scheduled election transitions depend on successful worker execution.
 
 Supabase database backups do not automatically include Storage object bytes. Coordinate PostgreSQL, Auth, private object snapshots and encryption keys. The optional db:backup command creates an encrypted application-schema dump; it is not a complete Supabase project backup. db:restore refuses the live host/database and restores transactionally into a separate empty recovery database. Restore objects/policies/roles/Auth mapping separately and perform a documented recovery drill.
 
@@ -173,6 +173,6 @@ The organization plans are Free (50 registered voters per election), Pro (100, â
 
 Billing uses Paystack hosted recurring card checkout. Add the live secret key to **PAYSTACK_SECRET_KEY in .env**, then run **npm.cmd run billing:setup** to create/reuse the three correctly priced monthly provider plans and save their codes privately. This setup does not subscribe or charge a customer. Restart the API and configure Paystack's live webhook to **https://YOUR_DOMAIN/api/billing/webhook**. See [docs/BILLING.md](docs/BILLING.md).
 
-Apply the application baseline and billing migrations using **npm.cmd run db:migrate** after setting the correct private PostgreSQL connection. Both migrations were applied to the selected Supabase project on 2026-10-03; live checks confirmed the capacity trigger and database privacy controls. Real checkout, recurring renewal, capacity concurrency, and provider cancellation still require live acceptance testing. Source implementation and successful build checks are not payment acceptance tests.
+Apply the application baseline and billing migrations using **npm.cmd run db:migrate** after setting the correct private PostgreSQL connection. All four migrations were applied to the selected Supabase project on 2026-10-03; live checks confirmed the capacity trigger and database privacy controls. Real checkout, recurring renewal, capacity concurrency, and provider cancellation still require live acceptance testing. Source implementation and successful build checks are not payment acceptance tests.
 
 Payment amounts/currency, tenant access, signatures, provider transactions and payment references are checked on the server. A redirect cannot activate a plan. Payment records are unique and confirmed ledger entries are immutable. Registration capacity is guarded by an election row lock and database trigger shared by all eligibility insertion paths. Cancellation is durable and processed by maintenance; keep the API worker running. Expiry changes new-registration limits without revoking existing voters or ballots. Upgrades start a new full-price monthly period and request cancellation of older renewal after the new provider subscription is linked. There is no proration or automated refund workflow.

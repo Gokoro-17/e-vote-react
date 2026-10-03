@@ -15,13 +15,11 @@ import {
   requireConfiguration,
   supabaseAdmin,
   authAvailability,
+  clearAuthCookies,
 } from "./supabase.js";
 import { mountExtensions } from "./extensions.js";
-import {
-  mountBilling,
-  mountBillingWebhook,
-  processBillingMaintenance,
-} from "./billing.js";
+import { mountWorker, runMaintenance } from "./worker.js";
+import { mountBilling, mountBillingWebhook } from "./billing.js";
 import {
   db,
   digest,
@@ -36,7 +34,6 @@ import {
   storeDocument,
   fetchDocument,
   removeDocument,
-  maintenance,
   serializable,
   processDeletionJob,
   eligibilityCounts,
@@ -69,6 +66,8 @@ app.use(
 );
 // Paystack signs the exact bytes. Register this before JSON parsing and browser CSRF middleware.
 mountBillingWebhook(app);
+// Machine requests use a dedicated bearer secret, before browser session/CSRF middleware.
+mountWorker(app);
 app.use(express.json({ limit: "128kb" }));
 app.use(cookieParser());
 const route =
@@ -2347,6 +2346,7 @@ app.delete(
       await db.deletionJob.findUniqueOrThrow({ where: { id: u.id } }),
     );
     await req.auth.client.auth.signOut({ scope: "global" });
+    clearAuthCookies(req, res);
     res.json({ ok: true, csrf: null, user: null });
   }),
 );
@@ -2639,7 +2639,8 @@ if (process.env.NODE_ENV !== "test" && process.env.VERCEL !== "1") {
     if (running) return;
     running = true;
     try {
-      if (!configurationIssues().length) await maintenance();
+      if (!configurationIssues().length)
+        await runMaintenance(Date.now() + 90000);
     } catch (e: any) {
       console.error("Maintenance failed:", e.code || e.name);
     } finally {
@@ -2647,18 +2648,4 @@ if (process.env.NODE_ENV !== "test" && process.env.VERCEL !== "1") {
     }
   }, 30000);
   timer.unref();
-  // Provider latency must not delay election opening, document expiry or notifications.
-  let billingRunning = false;
-  const billingTimer = setInterval(async () => {
-    if (billingRunning || configurationIssues().length) return;
-    billingRunning = true;
-    try {
-      await processBillingMaintenance();
-    } catch (e: any) {
-      console.error("Billing maintenance failed:", e.code || e.name);
-    } finally {
-      billingRunning = false;
-    }
-  }, 30000);
-  billingTimer.unref();
 }

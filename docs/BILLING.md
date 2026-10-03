@@ -15,7 +15,7 @@ The coordinator pays for their organization. Each election has its own capacity;
 2. Set `PAYSTACK_SECRET_KEY` in that same private `.env` to the live secret key from your Paystack integration. This key is separate from Supabase's secret key. Never use a `VITE_` variable for it.
 3. Run `npm.cmd run billing:setup`. It creates or reuses the three monthly NGN plans at the approved prices, validates their settings, and writes `PAYSTACK_PLAN_PRO`, `PAYSTACK_PLAN_BUSINESS`, and `PAYSTACK_PLAN_ENTERPRISE` into `.env`. It does not subscribe or charge anyone, edit unrelated plans, or change existing customer prices. Supplied plan codes must match the approved currency, amount, and interval.
 4. Set the production `APP_ORIGIN` to the site's actual HTTPS origin. In the Paystack live integration settings, set the webhook to `https://YOUR_DOMAIN/api/billing/webhook`. A localhost address cannot receive Paystack webhooks. Restart the API when changing environment configuration.
-5. Keep maintenance running: the persistent API runs it every 30 seconds, and sleeping/serverless deployments need `npm.cmd run worker:once` scheduled through a protected runner. Subscription association and durable cancellation requests depend on it.
+5. Keep maintenance running: the persistent API runs it every 30 seconds, and Supabase Cron invokes the protected production endpoint every minute. A dedicated runner can also use `npm.cmd run worker:once`. Subscription association and durable cancellation requests depend on it.
 
 Checkout stays unavailable until a live key and the matching plan code exist. The application has no pretend successful checkout, test subscriptions, fictitious payment ledger, or seeded users.
 
@@ -43,6 +43,6 @@ Use actual authorized organizations, accounts and approved live payments only. N
 5. Verify a genuine monthly renewal extends paid access, a failed renewal does not extend it, cancellation stops later debits, and an upgrade cancels the older renewal after the new subscription is associated. Verify existing voter access/results are retained after expiry.
 6. Check mobile/touch and keyboard use, readable price/capacity/consent, Paystack return/cancellation paths, pending and failed payment feedback, and reduced-motion/paused hero animation.
 
-**Not executed:** real checkout, recurring renewal, database capacity concurrency, and provider cancellation. Both database migrations are applied; these checks still require live Paystack credentials and real authorized accounts/payments. A successful build is not a payment acceptance test.
+**Not executed:** real checkout, recurring renewal, database capacity concurrency, and provider cancellation. All four database migrations are applied; these checks still require live Paystack credentials and real authorized accounts/payments. A successful build is not a payment acceptance test.
 
 Provider references: [Paystack subscriptions](https://paystack.com/docs/payments/subscriptions/), [raw-body webhook signatures and retries](https://paystack.com/docs/payments/webhooks/), [transaction verification](https://paystack.com/docs/api/transaction/#verify), [subscription management API](https://paystack.com/docs/api/subscription/).

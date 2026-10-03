@@ -56,8 +56,10 @@ export function StoreProvider({ children }) {
       setError("");
       return data;
     } catch (e) {
+      csrf = null;
       setError(e.message);
       setUser(null);
+      setMfa(false);
     } finally {
       setLoading(false);
     }
@@ -72,7 +74,12 @@ export function StoreProvider({ children }) {
     return result;
   };
   const logout = async () => {
-    await api("/auth/logout", {});
+    try {
+      await api("/auth/logout", {});
+    } catch (e) {
+      await refresh();
+      throw e;
+    }
     csrf = null;
     setUser(null);
     setMfa(false);
