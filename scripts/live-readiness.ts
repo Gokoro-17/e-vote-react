@@ -342,16 +342,19 @@ if (!configurationIssues().length) {
   await check(
     "Runtime cannot read or change managed Auth sessions",
     async () => {
+      // Inspect by catalog OID: resolving auth.sessions by name itself requires
+      // schema access, which the application intentionally does not have.
       const rights = await db.$queryRaw<any[]>`SELECT
-        has_column_privilege(current_user,'auth.sessions','id','SELECT') AS id_read,
-        has_column_privilege(current_user,'auth.sessions','user_id','SELECT') AS user_read,
-        has_table_privilege(current_user,'auth.sessions','UPDATE,DELETE,TRUNCATE') AS mutable`;
-      assert.equal(rights[0].id_read, false);
-      assert.equal(rights[0].user_read, false);
+        bool_or(has_column_privilege(current_user,c.oid,a.attnum,'SELECT')) AS readable,
+        bool_or(has_table_privilege(current_user,c.oid,'UPDATE,DELETE,TRUNCATE')) AS mutable
+        FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+        JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped
+        WHERE n.nspname='auth' AND c.relname='sessions'`;
+      assert.equal(rights[0].readable, false);
       assert.equal(rights[0].mutable, false);
       const views = await db.$queryRaw<
         any[]
-      >`SELECT to_regclass('evote."AuthSessionCheck"') AS obsolete`;
+      >`SELECT to_regclass('evote."AuthSessionCheck"')::text AS obsolete`;
       assert.equal(views[0].obsolete, null);
     },
   );
