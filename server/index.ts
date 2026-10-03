@@ -51,15 +51,6 @@ const app = express(),
   production = process.env.NODE_ENV === "production";
 const origin = process.env.APP_ORIGIN || "http://localhost:5174";
 // Frontend and API mutations must share this exact deployment origin.
-if (
-  production &&
-  (!origin.startsWith("https://") ||
-    !process.env.SMTP_URL ||
-    !process.env.TURNSTILE_SECRET)
-)
-  throw new Error(
-    "Production requires HTTPS origin, email transport and bot protection.",
-  );
 if (process.env.TRUST_PROXY === "1") app.set("trust proxy", 1);
 app.use(
   helmet({
@@ -2566,7 +2557,7 @@ mountExtensions(app, {
 app.use("/api", (_req, res) =>
   res.status(404).json({ error: "Endpoint not found." }),
 );
-if (production) {
+if (production && process.env.VERCEL !== "1") {
   const root = path.resolve("dist");
   app.use(express.static(root));
   app.get("/{*path}", (_req, res) =>
@@ -2637,7 +2628,8 @@ app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
   });
 });
 export { app };
-if (process.env.NODE_ENV !== "test") {
+// Vercel invokes the exported app; listeners and recurring work belong to a persistent host.
+if (process.env.NODE_ENV !== "test" && process.env.VERCEL !== "1") {
   const port = Number(process.env.PORT || 3001);
   app.listen(port, process.env.HOST || "127.0.0.1", () =>
     console.log(`E-Vote API listening on ${port}`),

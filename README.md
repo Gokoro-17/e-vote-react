@@ -155,7 +155,9 @@ Browser control is unavailable in this session. Responsive CSS was rebuilt for s
 
 The frontend is a Vite build, and the backend requires a Node runtime. A static frontend deployment must proxy /api to the same-origin backend. APP_ORIGIN must be the exact public origin; OAuth and cookie endpoints must share it.
 
-Production startup requires HTTPS APP_ORIGIN, app SMTP and Turnstile secret. Set HOST as appropriate for your API host and TRUST_PROXY only when the deployment really has a trusted proxy. Do not expose the backend across unrestricted proxy chains.
+Vercel deployment is configured in `vercel.json` and `api/index.ts`, so the Vite website and Express API are deployed together. Follow [docs/VERCEL.md](docs/VERCEL.md) for private environment-variable import, production Auth URLs and scheduled-worker setup.
+
+Production requests require HTTPS APP_ORIGIN, app SMTP and both Turnstile credentials. Missing configuration returns a JSON setup response and blocks sensitive operations. Set HOST as appropriate for a persistent API host and TRUST_PROXY only when the deployment really has a trusted proxy. Do not expose the backend across unrestricted proxy chains.
 
 The persistent API runs cleanup/scheduling/outbox maintenance every 30 seconds. For a serverless or sleeping host, schedule **npm.cmd run worker:once** using a protected worker/cron runner. Document expiration, notification campaigns, account deletion cleanup and scheduled election transitions depend on this process.
 

@@ -41,6 +41,24 @@ export async function authAvailability() {
 }
 export function configurationIssues() {
   const issues: string[] = [];
+  // Fail closed at the request boundary so health checks can report setup_required
+  // instead of crashing the serverless function during module initialization.
+  if (production) {
+    try {
+      const origin = new URL(appOrigin);
+      if (
+        origin.protocol !== "https:" ||
+        origin.origin !== appOrigin ||
+        origin.username ||
+        origin.password
+      )
+        issues.push("APP_ORIGIN must be the exact public HTTPS origin");
+    } catch {
+      issues.push("APP_ORIGIN must be the exact public HTTPS origin");
+    }
+    for (const name of ["SMTP_URL", "TURNSTILE_SITE_KEY", "TURNSTILE_SECRET"])
+      if (!process.env[name]) issues.push(name);
+  }
   for (const name of [
     "SUPABASE_URL",
     "SUPABASE_PUBLISHABLE_KEY",
@@ -82,7 +100,7 @@ export function requireConfiguration() {
   if (configurationIssues().length)
     throw Object.assign(
       new Error(
-        "Supabase setup is incomplete. The application administrator must finish the project connection.",
+        "Account services are not ready yet. The application administrator must finish the server configuration.",
       ),
       { status: 503 },
     );
