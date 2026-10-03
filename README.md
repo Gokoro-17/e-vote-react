@@ -119,6 +119,8 @@ Platform administrator: /workspace/platform. /admin redirects into the new works
 
 App tables are in private schema evote with RLS enabled and no schema/table grants for anon/authenticated. Keep evote out of the exposed Supabase Data API schemas. The migration defines NOLOGIN role evote_server with backend-only policies and restricted append-only grants. For production, use a dedicated login role inheriting evote_server; its password must be provisioned privately. Database owner credentials are for migration, not routine application hosting.
 
+The private `AuthSessionCheck` view checks session revocation using caller permissions and the existing `id`/`user_id` column grants. It exposes no tokens and avoids requiring a grant on Supabase's managed Auth schema. Apply its migration before deploying the corresponding API change.
+
 The API checks the current Supabase user and the corresponding auth.sessions row; application sessions expire after eight hours. Server-owned database roles determine platform and organization permissions. State transitions are constrained by code and database triggers. Draft rules/positions lock before voting; candidate profiles lock when voting begins.
 
 Database connections require TLS and strict certificate validation. If the project requires a custom CA, download its certificate through the Supabase dashboard and set SUPABASE_CA_CERT_PATH privately. The migration runner and backup tools also verify certificates; they do not disable verification to bypass connection errors. See the [Prisma PostgreSQL connection reference](https://docs.prisma.io/docs/orm/v6/overview/databases/postgresql).

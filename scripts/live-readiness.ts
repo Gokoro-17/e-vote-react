@@ -136,6 +136,22 @@ await check("Live Supabase Google sign-in", async () => {
     throw new Error("Google sign-in is disabled in the selected project.");
 });
 if (!configurationIssues().length) {
+  await check("Private session lookup preserves caller permissions", async () => {
+    await db.$queryRaw`SELECT id,user_id FROM evote."AuthSessionCheck" WHERE false`;
+    const views = await db.$queryRaw<any[]>`SELECT c.reloptions,
+      has_table_privilege('anon',c.oid,'SELECT') AS anonymous_access,
+      has_table_privilege('authenticated',c.oid,'SELECT') AS browser_access,
+      has_table_privilege('evote_server',c.oid,'SELECT') AS backend_access,
+      has_table_privilege('evote_server',c.oid,'UPDATE') AS backend_update
+      FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+      WHERE n.nspname='evote' AND c.relname='AuthSessionCheck' AND c.relkind='v'`;
+    assert.equal(views.length, 1);
+    assert.ok(views[0].reloptions.includes("security_invoker=true"));
+    assert.equal(views[0].anonymous_access, false);
+    assert.equal(views[0].browser_access, false);
+    assert.equal(views[0].backend_access, true);
+    assert.equal(views[0].backend_update, false);
+  });
   await check("Live registration capacity trigger is installed", async () => {
     const functions = await db.$queryRaw<
       any[]

@@ -56,7 +56,7 @@ async function providerSession(req: any, res: Response) {
   // A revoked session must not remain valid until its JWT expires. Roles never come from user_metadata.
   const active = await db.$queryRaw<
     any[]
-  >`SELECT id FROM auth.sessions WHERE id = ${claims.session_id}::uuid AND user_id = ${identity.user.id}::uuid`;
+  >`SELECT id FROM evote."AuthSessionCheck" WHERE id = ${claims.session_id}::uuid AND user_id = ${identity.user.id}::uuid`;
   if (!active.length) return null;
   return {
     client,
