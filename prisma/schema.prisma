@@ -1,0 +1,472 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+  schemas   = ["evote"]
+}
+
+model User {
+  id    String @id @default(uuid())
+  name  String
+  email String @unique
+
+  dob                DateTime? @db.Date
+  verifiedDob        DateTime? @db.Date
+  identityHash       String?   @unique
+  emailVerified      Boolean   @default(false)
+  suspended          Boolean   @default(false)
+  role               String    @default("VOTER")
+  consentAt          DateTime?
+  emailNotifications Boolean   @default(true)
+  createdAt          DateTime  @default(now())
+  sessions           Session[]
+
+  memberships   OrganizationMember[]
+  joinRequests  OrganizationJoinRequest[]
+  receipts      VoteReceipt[]
+  eligibility   VoterEligibility[]
+  verifications VerificationRequest[]
+  participation VoteStatus[]
+  notifications Notification[]
+
+  @@schema("evote")
+}
+
+model Session {
+  id                String   @id
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  csrf              String
+  reauthenticatedAt DateTime @default(now())
+  expiresAt         DateTime
+
+  @@index([expiresAt])
+  @@index([userId])
+  @@schema("evote")
+}
+
+model AuthRegistration {
+  id        String    @id
+  name      String
+  dob       DateTime? @db.Date
+  consentAt DateTime
+  createdAt DateTime  @default(now())
+
+  @@schema("evote")
+}
+
+model Organization {
+  id            String                    @id @default(uuid())
+  name          String
+  slug          String                    @unique
+  description   String                    @default("")
+  logo          String                    @default("")
+  color         String                    @default("#174b40")
+  contact       String                    @default("")
+  welcome       String                    @default("")
+  verified      Boolean                   @default(false)
+  suspended     Boolean                   @default(false)
+  plan          String                    @default("FREE")
+  members       OrganizationMember[]
+  joinRequests  OrganizationJoinRequest[]
+  groups        OrganizationGroup[]
+  elections     Election[]
+  audits        AuditLog[]
+  security      SecurityEvent[]
+  subscriptions BillingSubscription[]
+  payments      BillingPayment[]
+
+  @@index([name])
+  @@schema("evote")
+}
+
+model BillingSubscription {
+  id                    String           @id @default(uuid())
+  organizationId        String
+  organization          Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  plan                  String
+  providerPlanCode      String
+  providerCode          String?          @unique
+  customerCode          String?
+  payerEmail            String
+  amount                Int
+  currency              String           @default("NGN")
+  status                String           @default("PENDING")
+  paidUntil             DateTime?
+  cancellationRequested Boolean          @default(false)
+  lastCheckedAt         DateTime?
+  createdAt             DateTime         @default(now())
+  payments              BillingPayment[]
+
+  @@index([organizationId, paidUntil])
+  @@index([cancellationRequested, status])
+  @@schema("evote")
+}
+
+model BillingPayment {
+  reference                String              @id
+  organizationId           String
+  organization             Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  subscriptionId           String
+  subscription             BillingSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+  actorId                  String
+  amount                   Int
+  currency                 String              @default("NGN")
+  status                   String              @default("PENDING")
+  authorizationFingerprint String?
+  customerCode             String?
+  createdAt                DateTime            @default(now())
+  paidAt                   DateTime?
+
+  @@index([organizationId, createdAt])
+  @@index([customerCode, authorizationFingerprint])
+  @@schema("evote")
+}
+
+model BillingWebhook {
+  id          String   @id
+  type        String
+  processedAt DateTime @default(now())
+
+  @@schema("evote")
+}
+
+model OrganizationMember {
+  organizationId String
+  userId         String
+  role           String       @default("VOTER")
+  active         Boolean      @default(true)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([organizationId, userId])
+  @@index([userId, active])
+  @@schema("evote")
+}
+
+model Election {
+  id                 String                @id @default(uuid())
+  slug               String                @unique
+  organizationId     String
+  organization       Organization          @relation(fields: [organizationId], references: [id])
+  runoffOfId         String?               @unique
+  runoffOfElection   Election?             @relation("ElectionRunoff", fields: [runoffOfId], references: [id], onDelete: Restrict)
+  runoffElection     Election?             @relation("ElectionRunoff")
+  name               String
+  description        String                @default("")
+  mode               String                @default("GENERAL")
+  status             String                @default("DRAFT")
+  timezone           String                @default("Africa/Lagos")
+  location           String                @default("")
+  banner             String                @default("")
+  registrationStart  DateTime?
+  registrationEnd    DateTime?
+  votingStart        DateTime
+  votingEnd          DateTime
+  publishAt          DateTime?
+  resultVisibility   String                @default("HIDDEN")
+  minAge             Int                   @default(0)
+  maxAge             Int?
+  membershipRequired Boolean               @default(false)
+  geography          String                @default("")
+  customRules        String                @default("")
+  groupId            String?
+  group              OrganizationGroup?    @relation(fields: [groupId], references: [id])
+  faq                Json                  @default("[]")
+  access             String                @default("PUBLIC")
+  eventPasswordHash  String?
+  createdAt          DateTime              @default(now())
+  positions          ElectionPosition[]
+  registeredAtOpen   Int?
+  eligibleAtOpen     Int?
+  eligibility        VoterEligibility[]
+  verifications      VerificationRequest[]
+  invitations        Invitation[]
+  results            ElectionResult[]
+  activity           ElectionActivity[]
+
+  @@index([organizationId, status])
+  @@index([votingStart, votingEnd])
+  @@schema("evote")
+}
+
+model ElectionPosition {
+  id            String        @id @default(uuid())
+  electionId    String
+  election      Election      @relation(fields: [electionId], references: [id])
+  title         String
+  method        String        @default("SINGLE")
+  maxChoices    Int           @default(1)
+  maxVotes      Int           @default(1)
+  runoff        Boolean       @default(false)
+  candidates    Candidate[]
+  ballots       Ballot[]
+  participation VoteStatus[]
+  receipts      VoteReceipt[]
+
+  @@unique([electionId, title])
+  @@schema("evote")
+}
+
+model Candidate {
+  id          String           @id @default(uuid())
+  positionId  String
+  position    ElectionPosition @relation(fields: [positionId], references: [id])
+  userId      String?
+  name        String
+  bio         String           @default("")
+  manifesto   String           @default("")
+  photo       String           @default("")
+  campaign    String           @default("")
+  socialLinks Json             @default("[]")
+  status      String           @default("PENDING")
+
+  @@index([positionId, status])
+  @@index([userId])
+  @@schema("evote")
+}
+
+model VoterEligibility {
+  electionId    String
+  userId        String
+  election      Election           @relation(fields: [electionId], references: [id])
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status        String             @default("PENDING")
+  geography     String             @default("")
+  weight        Int                @default(1)
+  reason        String             @default("")
+  rulesApproved Boolean            @default(false)
+  groupId       String?
+  group         OrganizationGroup? @relation(fields: [groupId], references: [id])
+
+  @@id([electionId, userId])
+  @@index([userId])
+  @@schema("evote")
+}
+
+model VerificationRequest {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  electionId String
+  election   Election  @relation(fields: [electionId], references: [id])
+  status     String    @default("PENDING")
+  provider   String    @default("MANUAL_ELIGIBILITY")
+  type       String
+  note       String    @default("")
+  createdAt  DateTime  @default(now())
+  document   Document?
+
+  @@index([electionId, status])
+  @@index([userId, createdAt])
+  @@schema("evote")
+}
+
+model Document {
+  id        String              @id @default(uuid())
+  requestId String              @unique
+  request   VerificationRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  objectKey String              @unique
+  mime      String
+  size      Int
+  expiresAt DateTime
+
+  @@index([expiresAt])
+  @@schema("evote")
+}
+
+// Ballots intentionally contain no user, receipt, session, IP, or exact submission timestamp.
+model Ballot {
+  id              String           @id @default(uuid())
+  positionId      String
+  position        ElectionPosition @relation(fields: [positionId], references: [id])
+  encryptedChoice String
+  commitment      String
+
+  @@index([positionId])
+  @@schema("evote")
+}
+
+model VoteStatus {
+  userId     String
+  positionId String
+  user       User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  position   ElectionPosition @relation(fields: [positionId], references: [id])
+  count      Int              @default(1)
+  receipt    String           @unique
+  recordedAt DateTime         @default(now())
+
+  @@id([userId, positionId])
+  @@schema("evote")
+}
+
+model ElectionResult {
+  id         String   @id @default(uuid())
+  electionId String
+  election   Election @relation(fields: [electionId], references: [id])
+  data       Json
+  createdAt  DateTime @default(now())
+
+  @@schema("evote")
+}
+
+model AuditLog {
+  id             BigInt        @id @default(autoincrement())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  electionId     String?
+  actor          String
+  event          String
+  result         String        @default("SUCCESS")
+  createdAt      DateTime      @default(now())
+  previousHash   String
+  hash           String
+
+  @@index([organizationId, createdAt])
+  @@schema("evote")
+}
+
+model SecurityEvent {
+  id             String        @id @default(uuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  actor          String?
+  type           String
+  metadata       Json
+  reviewed       Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+
+  @@index([organizationId, createdAt])
+  @@schema("evote")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@schema("evote")
+}
+
+model MailOutbox {
+  id            String    @id @default(uuid())
+  to            String
+  subject       String
+  encryptedBody String
+  sentAt        DateTime?
+  claimedAt     DateTime?
+  attempts      Int       @default(0)
+  createdAt     DateTime  @default(now())
+
+  @@index([sentAt, createdAt])
+  @@schema("evote")
+}
+
+model Invitation {
+  id         String    @id
+  electionId String
+  election   Election  @relation(fields: [electionId], references: [id])
+  email      String
+  expiresAt  DateTime
+  usedAt     DateTime?
+
+  @@schema("evote")
+}
+
+model RateBucket {
+  id       String   @id
+  attempts Int      @default(1)
+  resetAt  DateTime
+
+  @@index([resetAt])
+  @@schema("evote")
+}
+
+model ElectionActivity {
+  electionId  String
+  election    Election @relation(fields: [electionId], references: [id])
+  hour        DateTime
+  submissions Int      @default(1)
+
+  @@id([electionId, hour])
+  @@schema("evote")
+}
+
+model OrganizationJoinRequest {
+  organizationId String
+  userId         String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status         String       @default("PENDING")
+  message        String       @default("")
+  createdAt      DateTime     @default(now())
+
+  @@id([organizationId, userId])
+  @@schema("evote")
+}
+
+model OrganizationGroup {
+  id             String             @id @default(uuid())
+  organizationId String
+  organization   Organization       @relation(fields: [organizationId], references: [id])
+  name           String
+  elections      Election[]
+  eligibility    VoterEligibility[]
+
+  @@unique([organizationId, name])
+  @@schema("evote")
+}
+
+model VoteReceipt {
+  id         String           @id
+  userId     String
+  user       User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  positionId String
+  position   ElectionPosition @relation(fields: [positionId], references: [id])
+  recordedAt DateTime         @default(now())
+
+  @@index([userId, positionId])
+  @@schema("evote")
+}
+
+model PlatformSettings {
+  id                    String   @id @default("platform")
+  documentRetentionDays Int      @default(30)
+  contactEmail          String   @default("")
+  welcomeMessage        String   @default("")
+  updatedAt             DateTime @updatedAt
+
+  @@schema("evote")
+}
+
+model DeletionJob {
+  id                  String    @id
+  encryptedObjectKeys String
+  attempts            Int       @default(0)
+  completedAt         DateTime?
+  createdAt           DateTime  @default(now())
+
+  @@schema("evote")
+}
+
+model NotificationCampaign {
+  id          String    @id @default(uuid())
+  electionId  String
+  title       String
+  message     String
+  cursor      String?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([completedAt, createdAt])
+  @@schema("evote")
+}

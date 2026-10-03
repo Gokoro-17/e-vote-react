@@ -1,0 +1,4 @@
+* text=auto eol=lf
+
+# Preserve the exact migration bytes recorded by the database checksum ledger.
+supabase/migrations/*.sql -text

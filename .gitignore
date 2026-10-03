@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+private-storage/
+coverage/
+*.log
+.local-postgres/
+.backups/
+.artifacts/
+supabase/.temp/
+supabase/.branches/
+*.key
+*.pem
+*.p12
+*.pfx
