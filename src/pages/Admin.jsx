@@ -974,7 +974,7 @@ function DraftSettings({ election: e, save, onDelete }) {
   };
   return (
     <details className="panel">
-      <summary>Edit draft configuration</summary>
+      <summary>Edit election</summary>
       <ActionForm
         onSubmit={(f) => {
           const data = {
