@@ -1303,11 +1303,33 @@ dd {
   color: var(--primary);
   font-size: 11px !important;
 }
+.email-next-step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+}
+.email-next-step p {
+  margin: 5px 0 0;
+}
 .danger-zone {
   border-color: #79565f;
 }
 .danger-zone h3 {
   color: #f0b4ac;
+}
+.compact-danger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-top: 22px;
+  padding: 18px;
+  border: 1px solid #79565f;
+  border-radius: 5px;
+}
+.compact-danger p {
+  margin: 5px 0 0;
 }
 .qr-code {
   height: 190px;
@@ -2211,6 +2233,21 @@ dd {
 .workspace-sidebar nav a:hover {
   background: var(--soft);
 }
+.workspace-more {
+  margin-top: 6px;
+  border-top: 1px solid var(--line);
+  padding-top: 7px;
+}
+.workspace-more > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 11px;
+  padding: 10px 13px;
+  list-style-position: inside;
+}
+.workspace-more[open] > summary {
+  color: var(--ink);
+}
 .sidebar-note {
   color: var(--muted);
   font-size: 11px;
@@ -2279,7 +2316,8 @@ dd {
 .election-selector > .l {
   flex: 1;
 }
-.election-selector a {
+.election-selector a,
+.election-selector button {
   font-size: 11px;
 }
 .election-selector .row {
@@ -2296,6 +2334,30 @@ dd {
 }
 .wizard-steps > .complete {
   color: var(--primary);
+}
+.advanced-options {
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  margin-top: 20px;
+  background: color-mix(in srgb, var(--soft) 55%, transparent);
+}
+.advanced-options > summary {
+  cursor: pointer;
+  padding: 16px 18px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.advanced-options-body {
+  display: flex;
+  flex-direction: column;
+  gap: 17px;
+  padding: 4px 18px 20px;
+}
+.advanced-options-body > .grid {
+  margin: 0;
+}
+.compact-options {
+  margin-top: 4px;
 }
 .position-editor {
   border: 1px solid var(--line);
@@ -2604,6 +2666,28 @@ dd {
   }
   .workspace-sidebar nav a svg {
     width: 15px;
+  }
+  .workspace-more {
+    flex-shrink: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+  .workspace-more > summary {
+    white-space: nowrap;
+    padding: 10px 12px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+  }
+  .workspace-more[open] {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .compact-danger {
+    align-items: stretch;
+    flex-direction: column;
   }
   .workspace-content {
     padding-top: 0;
@@ -4052,6 +4136,10 @@ input:-webkit-autofill:focus {
   }
   .voting-scene-caption p {
     font-size: 12px;
+  }
+  .email-next-step {
+    grid-template-columns: 1fr;
+    align-items: start;
   }
 }
 @media (prefers-reduced-motion: reduce) {

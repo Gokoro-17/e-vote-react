@@ -14,6 +14,8 @@ import {
   Plus,
   ArrowUpRight,
   CreditCard,
+  Copy,
+  Trash2,
 } from "lucide-react";
 import CreateElection from "./CreateElection.jsx";
 import Billing from "./Billing.jsx";
@@ -107,19 +109,21 @@ export default function Admin() {
     d?.memberships.some(
       (m) => m.organizationId === organizationId && m.role === "ADMIN",
     );
-  const tabs = [
+  const mainTabs = [
     "Overview",
     "Organizations",
     "Elections",
     "Voters",
     "Candidates",
-    "Verification",
     "Results",
+    "Settings",
+    "Billing",
+  ];
+  const advancedTabs = [
+    "Verification",
     "Analytics",
     "Audit Logs",
     "Security",
-    "Settings",
-    "Billing",
     ...(user.role === "SUPER_ADMIN" ? ["Platform"] : []),
   ];
   return (
@@ -130,7 +134,7 @@ export default function Admin() {
           <Plus size={16} /> New election
         </Link>
         <nav aria-label="Workspace sections">
-          {tabs.map((t) => (
+          {mainTabs.map((t) => (
             <NavLink
               key={t}
               to={"/workspace/" + t.toLowerCase().replaceAll(" ", "-")}
@@ -140,6 +144,19 @@ export default function Admin() {
               {t}
             </NavLink>
           ))}
+          <details className="workspace-more" open={advancedTabs.includes(tab)}>
+            <summary>More tools</summary>
+            {advancedTabs.map((t) => (
+              <NavLink
+                key={t}
+                to={"/workspace/" + t.toLowerCase().replaceAll(" ", "-")}
+                className={t === tab ? "selected" : ""}
+              >
+                <WorkspaceIcon tab={t} />
+                {t}
+              </NavLink>
+            ))}
+          </details>
         </nav>
         <div className="sidebar-note">
           ◈<p>Every important action is checked by the server.</p>
@@ -336,6 +353,27 @@ export default function Admin() {
                   </Field>
                   <div className="row">
                     <Link to={`/elections/${e.slug}`}>Public page ↗</Link>
+                    <button
+                      type="button"
+                      className="text-link"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(
+                            window.location.origin + "/elections/" + e.slug,
+                          );
+                          setError("");
+                          setMessage(
+                            "Election link copied. Share it with voters.",
+                          );
+                        } catch {
+                          setError(
+                            "Copy the public election URL from the Public page.",
+                          );
+                        }
+                      }}
+                    >
+                      <Copy size={15} /> Copy share link
+                    </button>
                     <a href={`/api/elections/${e.id}/qr`} download="qr.png">
                       QR code ↓
                     </a>
@@ -448,12 +486,27 @@ export default function Admin() {
                     e.status,
                   ) && (
                     <ActionForm
-                      onSubmit={(f) =>
-                        save(`/elections/${e.id}/candidates`, {
-                          ...f,
-                          accountEmail: f.accountEmail || undefined,
-                        })
-                      }
+                      reset
+                      success="Candidate added."
+                      onSubmit={async (f, form) => {
+                        const { image: _image, ...candidateInput } = f;
+                        const candidate = await api(
+                          `/elections/${e.id}/candidates`,
+                          {
+                            ...candidateInput,
+                            accountEmail: f.accountEmail || undefined,
+                          },
+                        );
+                        const file = form.elements.image?.files?.[0];
+                        if (file) {
+                          const image = new FormData();
+                          image.set("type", "CANDIDATE");
+                          image.set("candidateId", candidate.id);
+                          image.set("image", file);
+                          await api("/assets", image);
+                        }
+                        await reload();
+                      }}
                     >
                       <h3>Add candidate</h3>
                       <Field
@@ -480,7 +533,16 @@ export default function Admin() {
                       <Field label="Campaign statement">
                         <textarea name="campaign" />
                       </Field>
-                      <Field label="Photo URL" name="photo" type="url" />
+                      <Field
+                        label="Candidate photo"
+                        hint="Choose a JPEG or PNG from your device, up to 5 MB."
+                      >
+                        <input
+                          name="image"
+                          type="file"
+                          accept="image/jpeg,image/png"
+                        />
+                      </Field>
                       <button className="btn">Add candidate</button>
                     </ActionForm>
                   )}
@@ -624,7 +686,23 @@ export default function Admin() {
               e?.status === "DRAFT" &&
               canAdmin(e.organizationId) && (
                 <>
-                  <DraftSettings key={e.id} election={e} save={save} />
+                  <DraftSettings
+                    key={e.id}
+                    election={e}
+                    save={save}
+                    onDelete={async () => {
+                      if (
+                        !window.confirm(
+                          `Delete “${e.name}”? This permanently removes this draft and its candidates.`,
+                        )
+                      )
+                        return;
+                      await api(`/elections/${e.id}`, undefined, "DELETE");
+                      setSelected("");
+                      setMessage("Draft election deleted.");
+                      await reload();
+                    }}
+                  />
                   <DraftExtras
                     key={e.id + "extras"}
                     election={e}
@@ -886,7 +964,7 @@ function Analytics({ electionId }) {
     </div>
   );
 }
-function DraftSettings({ election: e, save }) {
+function DraftSettings({ election: e, save, onDelete }) {
   const local = (s) => {
     if (!s) return "";
     const d = new Date(s);
@@ -1000,14 +1078,19 @@ function DraftSettings({ election: e, save }) {
           type="password"
           minLength={12}
         />
-        <Field
-          label="Banner URL"
-          name="banner"
-          type="url"
-          defaultValue={e.banner}
-        />
         <button className="btn">Save draft</button>
       </ActionForm>
+      <div className="danger-zone compact-danger">
+        <div>
+          <b>Delete draft</b>
+          <p className="muted">
+            Available only before registration or participation begins.
+          </p>
+        </div>
+        <button type="button" className="btn danger-outline" onClick={onDelete}>
+          <Trash2 size={16} /> Delete election
+        </button>
+      </div>
     </details>
   );
 }

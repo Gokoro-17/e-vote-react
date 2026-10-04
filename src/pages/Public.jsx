@@ -764,7 +764,11 @@ export function Organization() {
   const { id } = useParams(),
     organization = useLoad("/organizations/" + id),
     { user } = useStore(),
-    o = organization.data;
+    membershipRequests = useLoad(user ? "/account/membership-requests" : null),
+    o = organization.data,
+    membershipRequest = membershipRequests.data?.find(
+      (request) => request.organizationId === o?.id,
+    );
   if (organization.loading)
     return (
       <div className="pg">
@@ -812,29 +816,40 @@ export function Organization() {
           {o.contact && <p className="muted">Contact: {o.contact}</p>}
         </div>
       </div>
-      <details className="panel join-panel">
-        <summary>Join this organization</summary>
+      <div className="panel join-panel">
+        <h3>Organization membership</h3>
         {user ? (
-          <ActionForm
-            className="f"
-            onSubmit={(f) => api("/organizations/" + o.id + "/join", f)}
-            success="Membership request sent for review."
-          >
-            <Field label="Message for the administrator">
-              <textarea
-                name="message"
-                maxLength={1000}
-                placeholder="Tell the administrator how you are connected to this organization."
-              />
-            </Field>
-            <button className="btn">Request membership</button>
-          </ActionForm>
+          membershipRequest?.status === "APPROVED" ? (
+            <p className="verified-line">
+              <CheckCircle2 size={17} /> Your membership is approved.
+            </p>
+          ) : membershipRequest?.status === "PENDING" ? (
+            <p className="muted">
+              Your request is waiting for an organization administrator.
+            </p>
+          ) : (
+            <ActionForm
+              className="f"
+              onSubmit={async () => {
+                await api("/organizations/" + o.id + "/join", { message: "" });
+                membershipRequests.load();
+              }}
+              success="Request sent. An administrator will review it."
+            >
+              {membershipRequest?.status === "REJECTED" && (
+                <p className="muted">
+                  Your earlier request was declined. You can submit a new one.
+                </p>
+              )}
+              <button className="btn">Request to join</button>
+            </ActionForm>
+          )
         ) : (
           <p>
             <Link to="/login">Sign in</Link> to request membership.
           </p>
         )}
-      </details>
+      </div>
       {[
         [
           "Active & upcoming",

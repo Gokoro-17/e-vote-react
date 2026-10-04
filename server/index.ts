@@ -861,6 +861,65 @@ app.patch(
     res.json({ ok: true });
   }),
 );
+app.delete(
+  "/api/elections/:id",
+  route(async (req, res) => {
+    requireUser(req);
+    const e = await getElection(req.params.id);
+    await access(req, e.organizationId, ["ADMIN"]);
+    await serializable(async (tx) => {
+      const current = await tx.election.findUnique({
+        where: { id: e.id },
+        select: {
+          status: true,
+          organizationId: true,
+          runoffElection: { select: { id: true } },
+        },
+      });
+      if (!current) fail("Election not found.", 404);
+      if (current.status !== "DRAFT")
+        fail(
+          "Only draft elections can be deleted. Archive an election after it begins.",
+        );
+      const [ballots, participation, receipts, eligibility, verification] =
+        await Promise.all([
+          tx.ballot.count({ where: { position: { electionId: e.id } } }),
+          tx.voteStatus.count({ where: { position: { electionId: e.id } } }),
+          tx.voteReceipt.count({ where: { position: { electionId: e.id } } }),
+          tx.voterEligibility.count({ where: { electionId: e.id } }),
+          tx.verificationRequest.count({ where: { electionId: e.id } }),
+        ]);
+      if (
+        current.runoffElection ||
+        ballots ||
+        participation ||
+        receipts ||
+        eligibility ||
+        verification
+      )
+        fail(
+          "This draft already has protected participation records and cannot be deleted.",
+        );
+      await tx.invitation.deleteMany({ where: { electionId: e.id } });
+      await tx.electionResult.deleteMany({ where: { electionId: e.id } });
+      await tx.electionActivity.deleteMany({ where: { electionId: e.id } });
+      await tx.candidate.deleteMany({
+        where: { position: { electionId: e.id } },
+      });
+      await tx.electionPosition.deleteMany({ where: { electionId: e.id } });
+      await tx.election.delete({ where: { id: e.id } });
+      await audit(
+        req.user.id,
+        "ELECTION_DELETED",
+        current.organizationId,
+        e.id,
+        "SUCCESS",
+        tx,
+      );
+    });
+    res.json({ ok: true });
+  }),
+);
 app.post(
   "/api/elections/:id/positions",
   route(async (req, res) => {
@@ -931,7 +990,6 @@ app.post(
         bio: z.string().max(2000).default(""),
         manifesto: z.string().max(5000).default(""),
         campaign: z.string().max(2000).default(""),
-        photo: httpUrl.or(z.literal("")).default(""),
         socialLinks: z.array(httpUrl).max(5).default([]),
       })
       .parse(req.body);
@@ -1007,7 +1065,6 @@ app.patch(
         bio: z.string().max(2000).optional(),
         manifesto: z.string().max(5000).optional(),
         campaign: z.string().max(2000).optional(),
-        photo: httpUrl.or(z.literal("")).optional(),
         socialLinks: z.array(httpUrl).max(5).optional(),
       })
       .parse(req.body);

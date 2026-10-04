@@ -91,6 +91,27 @@ export function mountExtensions(app: Express, c: any) {
     ),
   );
   app.get(
+    "/api/account/membership-requests",
+    route(async (req: any, res: any) =>
+      res.json(
+        await db.organizationJoinRequest.findMany({
+          where: { userId: requireUser(req).id },
+          select: {
+            organizationId: true,
+            status: true,
+            message: true,
+            createdAt: true,
+            organization: {
+              select: { name: true, slug: true, color: true },
+            },
+          },
+          orderBy: { createdAt: "desc" },
+          take: 100,
+        }),
+      ),
+    ),
+  );
+  app.get(
     "/api/account/receipts",
     route(async (req: any, res: any) =>
       res.json(
@@ -129,6 +150,13 @@ export function mountExtensions(app: Express, c: any) {
         },
       });
       if (member?.active) fail("You are already a member.");
+      const previous = await db.organizationJoinRequest.findUnique({
+        where: {
+          organizationId_userId: { organizationId: org.id, userId: u.id },
+        },
+      });
+      if (previous?.status === "PENDING")
+        fail("Your membership request is already waiting for review.");
       await db.organizationJoinRequest.upsert({
         where: {
           organizationId_userId: { organizationId: org.id, userId: u.id },
@@ -177,6 +205,11 @@ export function mountExtensions(app: Express, c: any) {
         .object({ status: z.enum(["APPROVED", "REJECTED"]) })
         .parse(req.body);
       await serializable(async (tx) => {
+        const organization = await tx.organization.findUnique({
+          where: { id: req.params.id },
+          select: { name: true },
+        });
+        if (!organization) fail("Organization not found.", 404);
         const changed = await tx.organizationJoinRequest.updateMany({
           where: {
             organizationId: req.params.id,
@@ -211,8 +244,12 @@ export function mountExtensions(app: Express, c: any) {
         );
         await notify(
           req.params.userId,
-          "Membership request reviewed",
-          input.status,
+          input.status === "APPROVED"
+            ? "Membership approved"
+            : "Membership request declined",
+          input.status === "APPROVED"
+            ? `You are now a member of ${organization.name}.`
+            : `Your request to join ${organization.name} was declined. You can contact the organization for more information.`,
           tx,
         );
       });
@@ -364,6 +401,7 @@ export function mountExtensions(app: Express, c: any) {
             candidateId: z.string().uuid().optional(),
           })
           .parse(req.body);
+      let candidateSelfUpload = false;
       if (input.type === "LOGO") {
         if (!input.organizationId) fail("Organization is required.");
         await access(req, input.organizationId, ["ADMIN"]);
@@ -376,8 +414,12 @@ export function mountExtensions(app: Express, c: any) {
           });
           if (!candidate) fail("Candidate is required.");
           election = await getElection(candidate!.position.electionId);
-          if (candidate!.userId !== u.id)
+          try {
             await access(req, election.organizationId, ["ADMIN"]);
+          } catch (error) {
+            if (candidate!.userId !== u.id) throw error;
+            candidateSelfUpload = true;
+          }
         } else {
           if (!input.electionId) fail("Election is required.");
           election = await getElection(input.electionId);
@@ -467,7 +509,10 @@ export function mountExtensions(app: Express, c: any) {
               fail("Candidate profile is locked.");
             await tx.candidate.update({
               where: { id: input.candidateId },
-              data: { photo: data.publicUrl, status: "PENDING" },
+              data: {
+                photo: data.publicUrl,
+                ...(candidateSelfUpload ? { status: "PENDING" } : {}),
+              },
             });
           });
       } catch (error) {

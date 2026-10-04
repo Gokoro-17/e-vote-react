@@ -246,47 +246,62 @@ export function VerifyEmail() {
         <MailCheck size={30} />
       </div>
       <PageHeading eyebrow="EMAIL CONFIRMATION" title="Check your inbox.">
-        Confirm your email to finish creating your account. Open the
-        confirmation link in this browser, or enter the code if your email
-        includes one. If you confirmed in another browser, sign in with your
-        email and password here.
+        Open the message from E-Vote and select Confirm email. We’ll bring you
+        back here and sign you in.
       </PageHeading>
       {params.has("expired") && (
         <Feedback error="We couldn’t finish this sign-in link. If your email is already confirmed, sign in with your password. Otherwise, request a new confirmation email below." />
       )}
-      <ActionForm
-        onSubmit={async (f) => {
-          const result = await auth("verify-email", f);
-          go(
-            result.needsMfa
-              ? "/two-factor"
-              : result.user.consentAt
-                ? "/dashboard"
-                : "/onboarding",
-          );
-        }}
-        success=""
-      >
-        <Field
-          label="Email address"
-          name="email"
-          type="email"
-          defaultValue={params.get("email") || ""}
-          autoComplete="email"
-          required
-        />
-        <Field
-          label="Confirmation code"
-          name="code"
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          pattern="[0-9]{6,10}"
-          required
-        />
-        <button className="btn btn-full">
-          Confirm email <ArrowRight size={16} />
-        </button>
-      </ActionForm>
+      <div className="panel email-next-step">
+        <MailCheck size={24} />
+        <div>
+          <b>Use the confirmation link in your email</b>
+          <p className="muted">
+            Keep this page open. If you already confirmed your address, return
+            to sign in.
+          </p>
+        </div>
+        <Link className="btn alt" to="/login">
+          Go to sign in
+        </Link>
+      </div>
+      <details className="panel">
+        <summary>My email contains a confirmation code</summary>
+        <ActionForm
+          className="f"
+          onSubmit={async (f) => {
+            const result = await auth("verify-email", f);
+            go(
+              result.needsMfa
+                ? "/two-factor"
+                : result.user.consentAt
+                  ? "/dashboard"
+                  : "/onboarding",
+            );
+          }}
+          success=""
+        >
+          <Field
+            label="Email address"
+            name="email"
+            type="email"
+            defaultValue={params.get("email") || ""}
+            autoComplete="email"
+            required
+          />
+          <Field
+            label="Confirmation code"
+            name="code"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            pattern="[0-9]{6,10}"
+            required
+          />
+          <button className="btn btn-full">
+            Confirm email <ArrowRight size={16} />
+          </button>
+        </ActionForm>
+      </details>
       <details className="panel">
         <summary>Didn’t receive the email?</summary>
         <p className="muted">
@@ -507,6 +522,8 @@ function AccountNav() {
 export function Account() {
   const { user, refresh } = useStore(),
     verification = useLoad("/verification/status"),
+    memberships = useLoad("/account/memberships"),
+    membershipRequests = useLoad("/account/membership-requests"),
     [remove, setRemove] = useState(false),
     [error, setError] = useState("");
   return (
@@ -567,6 +584,51 @@ export function Account() {
           </p>
         </div>
       </div>
+      <section className="s">
+        <h2>Organization memberships</h2>
+        {memberships.loading || membershipRequests.loading ? (
+          <Loading />
+        ) : memberships.error || membershipRequests.error ? (
+          <LoadError
+            error={memberships.error || membershipRequests.error}
+            retry={() => {
+              memberships.load();
+              membershipRequests.load();
+            }}
+          />
+        ) : memberships.data?.length || membershipRequests.data?.length ? (
+          <div className="panel">
+            {memberships.data?.map((membership) => (
+              <div className="notification" key={membership.organizationId}>
+                <div>
+                  <b>{membership.organization.name}</b>
+                  <p>{statusType(membership.role)} membership</p>
+                </div>
+                <Badge value="APPROVED" />
+              </div>
+            ))}
+            {membershipRequests.data
+              ?.filter((request) => request.status !== "APPROVED")
+              .map((request) => (
+                <div className="notification" key={request.organizationId}>
+                  <div>
+                    <b>{request.organization.name}</b>
+                    <p>
+                      {request.status === "PENDING"
+                        ? "Waiting for an organization administrator"
+                        : "Membership request declined"}
+                    </p>
+                  </div>
+                  <Badge value={request.status} />
+                </div>
+              ))}
+          </div>
+        ) : (
+          <Empty title="No organization memberships yet">
+            Request to join from an organization’s public page.
+          </Empty>
+        )}
+      </section>
       <section className="s">
         <h2>Verification documents</h2>
         {verification.loading ? (

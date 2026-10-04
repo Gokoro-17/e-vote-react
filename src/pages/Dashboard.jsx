@@ -9,6 +9,7 @@ import {
   LoadError,
   Empty,
   date,
+  Badge,
 } from "../components.jsx";
 import { ElectionCard } from "./Public.jsx";
 export default function Dashboard() {
@@ -16,6 +17,7 @@ export default function Dashboard() {
     elections = useLoad("/elections"),
     receipts = useLoad("/account/receipts"),
     memberships = useLoad("/account/memberships"),
+    membershipRequests = useLoad("/account/membership-requests"),
     [tab, setTab] = useState("Active");
   const ended = [
     "VOTING_CLOSED",
@@ -138,13 +140,47 @@ export default function Dashboard() {
                 </span>
                 <div>
                   <b>{m.organization.name}</b>
-                  <small>{m.role.toLowerCase()}</small>
+                  <small>Membership approved · {m.role.toLowerCase()}</small>
                 </div>
                 <ArrowUpRight size={16} />
               </Link>
             ))
           ) : (
             <p className="muted">Your active memberships will appear here.</p>
+          )}
+          {membershipRequests.loading ? (
+            <Loading>Checking membership requests…</Loading>
+          ) : membershipRequests.error ? (
+            <LoadError
+              error={membershipRequests.error}
+              retry={membershipRequests.load}
+            />
+          ) : (
+            membershipRequests.data
+              ?.filter((request) => request.status !== "APPROVED")
+              .map((request) => (
+                <Link
+                  className="organization-row"
+                  key={request.organizationId}
+                  to={"/organizations/" + request.organization.slug}
+                >
+                  <span
+                    className="org-avatar"
+                    style={{ background: request.organization.color }}
+                  >
+                    {request.organization.name.slice(0, 2).toUpperCase()}
+                  </span>
+                  <div>
+                    <b>{request.organization.name}</b>
+                    <small>
+                      {request.status === "PENDING"
+                        ? "Waiting for an administrator"
+                        : "Request declined"}
+                    </small>
+                  </div>
+                  <Badge value={request.status} />
+                </Link>
+              ))
           )}
         </section>
         <section className="panel">
