@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowUpRight, Bell, FileCheck2, Users, Vote } from "lucide-react";
+import { ArrowUpRight, Bell, Building2, Users, Vote } from "lucide-react";
 import { useStore } from "../store.jsx";
 import {
   useLoad,
@@ -18,7 +18,7 @@ export default function Dashboard() {
     receipts = useLoad("/account/receipts"),
     memberships = useLoad("/account/memberships"),
     membershipRequests = useLoad("/account/membership-requests"),
-    [tab, setTab] = useState("Active");
+    [tab, setTab] = useState("Open now");
   const ended = [
     "VOTING_CLOSED",
     "RESULTS_PENDING",
@@ -27,62 +27,63 @@ export default function Dashboard() {
   ];
   const rows =
     elections.data?.filter((e) =>
-      tab === "Active"
+      tab === "Open now"
         ? e.status === "VOTING_OPEN"
         : tab === "Upcoming"
           ? ["REGISTRATION_OPEN", "VOTING_UPCOMING"].includes(e.status)
-          : tab === "Completed"
+          : tab === "Past"
             ? ended.includes(e.status)
-            : true,
+            : false,
     ) || [];
   return (
     <div className="pg">
       <PageHeading
         eyebrow="YOUR VOTING DASHBOARD"
-        title={"Welcome, " + user.name.split(" ")[0] + "."}
+        title={"Hi, " + user.name.split(" ")[0] + "."}
         action={
           <Link className="btn alt" to="/notifications">
             <Bell size={17} /> Notifications
           </Link>
         }
       >
-        Your elections, communities, and participation in one place.
+        Choose what you want to do next.
       </PageHeading>
+      <h2 className="dashboard-prompt">What would you like to do?</h2>
       <div className="dashboard-actions">
         <Link to="/elections">
           <Vote size={23} />
           <div>
-            <b>Find an election</b>
-            <span>Explore events and check your eligibility</span>
+            <b>Vote in an election</b>
+            <span>Find an open event and review your eligibility</span>
           </div>
           <ArrowUpRight size={18} />
         </Link>
         <Link to="/organizations">
           <Users size={23} />
           <div>
-            <b>Join your community</b>
-            <span>Find your organization and request access</span>
+            <b>Join an organization</b>
+            <span>Request access to your school, club, or community</span>
           </div>
           <ArrowUpRight size={18} />
         </Link>
-        <Link to="/account">
-          <FileCheck2 size={23} />
+        <Link to="/workspace">
+          <Building2 size={23} />
           <div>
-            <b>Manage your profile</b>
-            <span>Review verification and privacy settings</span>
+            <b>Organize an election</b>
+            <span>Create an organization or manage an existing vote</span>
           </div>
           <ArrowUpRight size={18} />
         </Link>
       </div>
       <section className="s">
         <div className="section-heading">
-          <h2>Your elections</h2>
+          <h2>Elections available to you</h2>
           <Link className="text-link" to="/elections">
             Browse all elections <ArrowUpRight size={16} />
           </Link>
         </div>
         <div className="tabs" role="tablist" aria-label="Election status">
-          {["Active", "Upcoming", "Completed", "All"].map((t) => (
+          {["Open now", "Upcoming", "Past"].map((t) => (
             <button
               key={t}
               id={"tab-" + t}
@@ -112,8 +113,8 @@ export default function Dashboard() {
             </div>
           ) : (
             <Empty title={"No " + tab.toLowerCase() + " elections yet"}>
-              Events available to you will appear here. Explore organizations to
-              find your community.
+              Events available to you will appear here. Browse elections or join
+              your organization to get started.
             </Empty>
           )}
         </div>

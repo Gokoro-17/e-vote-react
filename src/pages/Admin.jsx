@@ -69,9 +69,17 @@ export default function Admin() {
       `/admin/dashboard?page=${electionPage}&q=${encodeURIComponent(electionSearch)}`,
     ),
     tab =
-      { "audit-logs": "Audit Logs", new: "Create election" }[slug] ||
-      slug.charAt(0).toUpperCase() + slug.slice(1),
-    setTab = (t) => go("/workspace/" + t.toLowerCase().replaceAll(" ", "-")),
+      {
+        overview: "Home",
+        "audit-logs": "Audit Logs",
+        new: "Create election",
+      }[slug] || slug.charAt(0).toUpperCase() + slug.slice(1),
+    setTab = (t) =>
+      go(
+        t === "Home"
+          ? "/workspace/overview"
+          : "/workspace/" + t.toLowerCase().replaceAll(" ", "-"),
+      ),
     [selected, setSelected] = useState(""),
     [orgId, setOrg] = useState(""),
     [error, setError] = useState(""),
@@ -109,17 +117,13 @@ export default function Admin() {
     d?.memberships.some(
       (m) => m.organizationId === organizationId && m.role === "ADMIN",
     );
-  const mainTabs = [
-    "Overview",
-    "Organizations",
-    "Elections",
-    "Voters",
-    "Candidates",
-    "Results",
-    "Settings",
-    "Billing",
-  ];
+  const adminOrganizations =
+      d?.organizations.filter((organization) => canAdmin(organization.id)) ||
+      [],
+    firstDraft = d?.elections.find((election) => election.status === "DRAFT"),
+    mainTabs = ["Home", "Elections", "Organizations", "Billing"];
   const advancedTabs = [
+    "Settings",
     "Verification",
     "Analytics",
     "Audit Logs",
@@ -130,14 +134,28 @@ export default function Admin() {
     <div className="pg workspace">
       <aside className="workspace-sidebar">
         <span className="eyebrow">ORGANIZER WORKSPACE</span>
-        <Link className="btn sidebar-create" to="/workspace/new">
-          <Plus size={16} /> New election
+        <Link
+          className="btn sidebar-create"
+          to={
+            d && !adminOrganizations.length
+              ? "/workspace/organizations"
+              : "/workspace/new"
+          }
+        >
+          <Plus size={16} />
+          {d && !adminOrganizations.length
+            ? "Create organization"
+            : "New election"}
         </Link>
         <nav aria-label="Workspace sections">
           {mainTabs.map((t) => (
             <NavLink
               key={t}
-              to={"/workspace/" + t.toLowerCase().replaceAll(" ", "-")}
+              to={
+                t === "Home"
+                  ? "/workspace/overview"
+                  : "/workspace/" + t.toLowerCase().replaceAll(" ", "-")
+              }
               className={t === tab ? "selected" : ""}
             >
               <WorkspaceIcon tab={t} />
@@ -167,9 +185,7 @@ export default function Admin() {
           <div>
             <span className="eyebrow">E-VOTE / {tab.toUpperCase()}</span>
             <h2>
-              {tab === "Overview"
-                ? `Welcome, ${user.name.split(" ")[0]}.`
-                : tab}
+              {tab === "Home" ? `Welcome, ${user.name.split(" ")[0]}.` : tab}
             </h2>
           </div>
           <button className="btn alt" onClick={reload}>
@@ -180,44 +196,57 @@ export default function Admin() {
         {dashboard.loading && !d && <p>Loading workspace…</p>}
         {d && (
           <>
-            {![
-              "Settings",
-              "Platform",
-              "Billing",
-              "Organizations",
-              "Create election",
-            ].includes(tab) && (
-              <ActionForm
-                onSubmit={(f) => {
-                  setElectionPage(1);
-                  setSelected("");
-                  setElectionSearch(f.q.trim());
-                }}
-              >
-                <div className="row search-controls">
-                  <Field
-                    label="Find an election"
-                    name="q"
-                    type="search"
-                    maxLength={100}
-                    defaultValue={electionSearch}
-                  />
-                  <button className="btn alt">Search</button>
-                </div>
-              </ActionForm>
-            )}
-            {["Overview", "Analytics"].includes(tab) && (
+            {tab === "Home" && (
               <>
-                <p className="muted">
-                  A clear view of your elections and participation.
-                </p>
+                <div className="panel workspace-guide">
+                  <div>
+                    <span className="eyebrow">YOUR NEXT STEP</span>
+                    <h3>
+                      {!adminOrganizations.length
+                        ? "Create your organization"
+                        : !d.elections.length
+                          ? "Create your first election"
+                          : firstDraft
+                            ? "Finish your draft election"
+                            : "Your workspace is ready"}
+                    </h3>
+                    <p className="muted">
+                      {!adminOrganizations.length
+                        ? "Add the school, club, company, or community that will run the election."
+                        : !d.elections.length
+                          ? "Set the voting dates and add the positions people will vote for."
+                          : firstDraft
+                            ? "Add candidates, review the public page, then open registration when you are ready."
+                            : "Review participation or create another election whenever you need one."}
+                    </p>
+                  </div>
+                  <Link
+                    className="btn"
+                    to={
+                      !adminOrganizations.length
+                        ? "/workspace/organizations"
+                        : !d.elections.length
+                          ? "/workspace/new"
+                          : firstDraft
+                            ? "/workspace/candidates"
+                            : "/workspace/elections"
+                    }
+                    onClick={() => firstDraft && setSelected(firstDraft.id)}
+                  >
+                    {!adminOrganizations.length
+                      ? "Create organization"
+                      : !d.elections.length
+                        ? "Create election"
+                        : firstDraft
+                          ? "Continue setup"
+                          : "Manage elections"}
+                    <ArrowUpRight size={16} />
+                  </Link>
+                </div>
                 <div className="stats">
                   {[
-                    ["Active elections", d.stats.active],
-                    ["Upcoming", d.stats.upcoming],
-                    ["Completed", d.stats.completed],
+                    ["Your elections", d.elections.length],
                     ["Registrations", d.stats.registered],
-                    ["Verified", d.stats.verified],
                     ["Ballots cast", d.stats.votes],
                     ["Review alerts", d.stats.alerts],
                   ].map(([label, n]) => (
@@ -227,44 +256,13 @@ export default function Admin() {
                     </div>
                   ))}
                 </div>
-                {tab === "Analytics" && (
-                  <div className="panel">
-                    <h3>Verification rate</h3>
-                    <p>
-                      {d.stats.registered
-                        ? (
-                            (d.stats.verified / d.stats.registered) *
-                            100
-                          ).toFixed(1)
-                        : 0}
-                      % of registrations verified
-                    </p>
-                    <div className="bar">
-                      <i
-                        style={{
-                          width:
-                            (d.stats.registered
-                              ? (d.stats.verified / d.stats.registered) * 100
-                              : 0) + "%",
-                        }}
-                      />
-                    </div>
-                    <p className="muted">
-                      Download per-election turnout reports from Results.
-                      Candidate performance appears after configured
-                      publication. Participation counts represent submissions
-                      across positions.
-                    </p>
-                  </div>
-                )}
                 {d.elections.length === 0 ? (
-                  <Empty title="Create your first voting event">
-                    Start with an organization, then build your ballot in
-                    Elections.
+                  <Empty title="No elections yet">
+                    Follow the next step above to get started.
                   </Empty>
                 ) : (
-                  <div className="grid">
-                    {d.elections.map((el) => (
+                  <div className="grid workspace-election-list">
+                    {d.elections.slice(0, 4).map((el) => (
                       <div className="panel" key={el.id}>
                         <span className="pill">{status(el.status)}</span>
                         <h3>{el.name}</h3>
@@ -329,14 +327,13 @@ export default function Admin() {
               </>
             )}
             {e &&
-              ![
-                "Overview",
-                "Settings",
-                "Platform",
-                "Billing",
-
-                "Organizations",
-                "Create election",
+              [
+                "Elections",
+                "Candidates",
+                "Voters",
+                "Verification",
+                "Results",
+                "Analytics",
               ].includes(tab) && (
                 <div className="panel election-selector">
                   <Field label="Selected election">
@@ -381,14 +378,63 @@ export default function Admin() {
                   </div>
                 </div>
               )}
+            {e &&
+              ["Elections", "Candidates", "Voters", "Results"].includes(
+                tab,
+              ) && (
+                <nav className="election-flow-nav" aria-label="Election setup">
+                  {[
+                    ["Elections", "1", "Setup"],
+                    ["Candidates", "2", "Candidates"],
+                    ["Voters", "3", "Voters"],
+                    ["Results", "4", "Results"],
+                  ].map(([target, number, label]) => (
+                    <button
+                      type="button"
+                      key={target}
+                      className={tab === target ? "current" : ""}
+                      aria-current={tab === target ? "step" : undefined}
+                      onClick={() => setTab(target)}
+                    >
+                      <span>{number}</span>
+                      {label}
+                    </button>
+                  ))}
+                </nav>
+              )}
             {tab === "Elections" && e && (
               <>
-                <div className="panel">
-                  <h3>Election lifecycle</h3>
-                  <p className="muted">
-                    Registration → upcoming → voting → closed → calculate →
-                    publish → archive. Configuration locks when draft ends.
-                  </p>
+                <div className="panel election-next-step">
+                  <div>
+                    <span className="eyebrow">CURRENT STATUS</span>
+                    <span className="pill">{status(e.status)}</span>
+                    <h3>
+                      {next[e.status]
+                        ? `Next: ${labels[next[e.status]]}`
+                        : "Election complete"}
+                    </h3>
+                    <p className="muted">
+                      {e.status === "DRAFT"
+                        ? "Add your candidates and check the public page before opening registration."
+                        : e.status === "REGISTRATION_OPEN"
+                          ? "Invite voters and review eligibility requests."
+                          : e.status === "VOTING_UPCOMING"
+                            ? "Registration is complete. Open voting when the scheduled time arrives."
+                            : e.status === "VOTING_OPEN"
+                              ? "Voting is live. Monitor participation, then close it when the period ends."
+                              : e.status === "VOTING_CLOSED"
+                                ? "Voting is closed. Calculate the final result totals."
+                                : e.status === "RESULTS_PENDING"
+                                  ? "Review the totals, then publish them for voters."
+                                  : e.status === "RESULTS_PUBLISHED"
+                                    ? "Results are public. Archive the election when your work is finished."
+                                    : "This election is archived and available for your records."}
+                    </p>
+                    <small className="muted">
+                      Voting: {date(e.votingStart, e.timezone)} –{" "}
+                      {date(e.votingEnd, e.timezone)}
+                    </small>
+                  </div>
                   {next[e.status] && canAdmin(e.organizationId) && (
                     <button
                       className="btn"
@@ -415,10 +461,6 @@ export default function Admin() {
                       {labels[next[e.status]]}
                     </button>
                   )}
-                  <p>
-                    Voting: {date(e.votingStart, e.timezone)} –{" "}
-                    {date(e.votingEnd, e.timezone)}
-                  </p>
                 </div>
                 {e.status === "DRAFT" && canAdmin(e.organizationId) && (
                   <ActionForm
@@ -433,49 +475,79 @@ export default function Admin() {
                   >
                     <h3>Add position / category</h3>
                     <Field label="Title" name="title" required />
-                    <Field label="Voting method">
-                      <select name="method">
-                        {[
-                          "SINGLE",
-                          "MULTIPLE",
-                          "APPROVAL",
-                          "RANKED",
-                          "WEIGHTED",
-                        ].map((m) => (
-                          <option key={m}>{m}</option>
-                        ))}
-                      </select>
-                    </Field>
-                    <Field
-                      label="Maximum selections"
-                      name="maxChoices"
-                      type="number"
-                      defaultValue={1}
-                      min={1}
-                      max={100}
-                    />
-                    <Field
-                      label="Maximum submissions per voter"
-                      name="maxVotes"
-                      type="number"
-                      defaultValue={1}
-                      min={1}
-                      max={100}
-                    />
-                    <label>
-                      <input name="runoff" type="checkbox" /> Flag results
-                      requiring a runoff
-                    </label>
+                    <p className="muted">
+                      For example: President, Treasurer, or People’s Choice.
+                    </p>
+                    <details className="advanced-options compact-options">
+                      <summary>Change voting rules</summary>
+                      <div className="advanced-options-body">
+                        <Field label="Voting method">
+                          <select name="method">
+                            {[
+                              ["SINGLE", "Choose one"],
+                              ["MULTIPLE", "Choose several"],
+                              ["APPROVAL", "Approve any number"],
+                              ["RANKED", "Rank by preference"],
+                              ["WEIGHTED", "Weighted vote"],
+                            ].map(([value, label]) => (
+                              <option key={value} value={value}>
+                                {label}
+                              </option>
+                            ))}
+                          </select>
+                        </Field>
+                        <Field
+                          label="Maximum selections"
+                          name="maxChoices"
+                          type="number"
+                          defaultValue={1}
+                          min={1}
+                          max={100}
+                        />
+                        <Field
+                          label="Submissions allowed per voter"
+                          name="maxVotes"
+                          type="number"
+                          defaultValue={1}
+                          min={1}
+                          max={100}
+                        />
+                        <label className="check-label">
+                          <input name="runoff" type="checkbox" />
+                          <span>Flag outcomes that may need a runoff</span>
+                        </label>
+                      </div>
+                    </details>
                     <button className="btn">Add position</button>
                   </ActionForm>
                 )}
-                <div className="panel">
-                  <h3>Positions</h3>
-                  {e.positions.map((p) => (
-                    <p key={p.id}>
-                      {p.title} · {p.method} · {p.candidates.length} candidates
+                <div className="panel position-summary-list">
+                  <div className="row between">
+                    <h3>Ballot positions</h3>
+                    <button
+                      className="text-link"
+                      onClick={() => setTab("Candidates")}
+                    >
+                      Manage candidates <ArrowUpRight size={15} />
+                    </button>
+                  </div>
+                  {e.positions.length ? (
+                    e.positions.map((p) => (
+                      <div key={p.id}>
+                        <b>{p.title}</b>
+                        <span>
+                          {status(p.method)} · {p.candidates.length}{" "}
+                          {p.candidates.length === 1
+                            ? "candidate"
+                            : "candidates"}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="muted">
+                      Add the first position on the ballot.
                     </p>
-                  ))}
+                  )}
                 </div>
               </>
             )}
@@ -490,6 +562,7 @@ export default function Admin() {
                       success="Candidate added."
                       onSubmit={async (f, form) => {
                         const { image: _image, ...candidateInput } = f;
+                        const file = form.elements.image?.files?.[0];
                         const candidate = await api(
                           `/elections/${e.id}/candidates`,
                           {
@@ -497,25 +570,34 @@ export default function Admin() {
                             accountEmail: f.accountEmail || undefined,
                           },
                         );
-                        const file = form.elements.image?.files?.[0];
+                        form.reset();
                         if (file) {
-                          const image = new FormData();
-                          image.set("type", "CANDIDATE");
-                          image.set("candidateId", candidate.id);
-                          image.set("image", file);
-                          await api("/assets", image);
+                          try {
+                            const image = new FormData();
+                            image.set("type", "CANDIDATE");
+                            image.set("candidateId", candidate.id);
+                            image.set("image", file);
+                            await api("/assets", image);
+                          } catch (uploadError) {
+                            await reload();
+                            throw new Error(
+                              `Candidate added, but the photo could not upload: ${uploadError.message}`,
+                            );
+                          }
                         }
                         await reload();
                       }}
                     >
                       <h3>Add candidate</h3>
-                      <Field
-                        label="Candidate account email, if already an active member"
-                        name="accountEmail"
-                        type="email"
-                      />
+                      {!e.positions.length && (
+                        <Feedback error="Add a ballot position before adding candidates." />
+                      )}
                       <Field label="Position">
-                        <select name="positionId" required>
+                        <select
+                          name="positionId"
+                          required
+                          disabled={!e.positions.length}
+                        >
                           {e.positions.map((p) => (
                             <option key={p.id} value={p.id}>
                               {p.title}
@@ -523,16 +605,7 @@ export default function Admin() {
                           ))}
                         </select>
                       </Field>
-                      <Field label="Name" name="name" required />
-                      <Field label="Biography">
-                        <textarea name="bio" />
-                      </Field>
-                      <Field label="Manifesto">
-                        <textarea name="manifesto" />
-                      </Field>
-                      <Field label="Campaign statement">
-                        <textarea name="campaign" />
-                      </Field>
+                      <Field label="Candidate name" name="name" required />
                       <Field
                         label="Candidate photo"
                         hint="Choose a JPEG or PNG from your device, up to 5 MB."
@@ -543,7 +616,29 @@ export default function Admin() {
                           accept="image/jpeg,image/png"
                         />
                       </Field>
-                      <button className="btn">Add candidate</button>
+                      <details className="advanced-options compact-options">
+                        <summary>Add profile details</summary>
+                        <div className="advanced-options-body">
+                          <Field
+                            label="Candidate account email (optional)"
+                            hint="Use this only when the candidate already has an active member account."
+                            name="accountEmail"
+                            type="email"
+                          />
+                          <Field label="Short biography">
+                            <textarea name="bio" maxLength={2000} />
+                          </Field>
+                          <Field label="Manifesto">
+                            <textarea name="manifesto" maxLength={5000} />
+                          </Field>
+                          <Field label="Campaign statement">
+                            <textarea name="campaign" maxLength={2000} />
+                          </Field>
+                        </div>
+                      </details>
+                      <button className="btn" disabled={!e.positions.length}>
+                        Add candidate
+                      </button>
                     </ActionForm>
                   )}
                 <div className="panel">
@@ -574,7 +669,12 @@ export default function Admin() {
                               )}
                           </div>
                           <div className="row">
-                            {["APPROVED", "REJECTED", "WITHDRAWN"].map((s) => (
+                            {(c.status === "PENDING"
+                              ? ["APPROVED", "REJECTED"]
+                              : c.status === "APPROVED"
+                                ? ["WITHDRAWN"]
+                                : ["APPROVED"]
+                            ).map((s) => (
                               <button
                                 className="btn alt"
                                 key={s}
@@ -596,7 +696,11 @@ export default function Admin() {
                                   )
                                 }
                               >
-                                {status(s)}
+                                {s === "APPROVED"
+                                  ? "Approve"
+                                  : s === "REJECTED"
+                                    ? "Reject"
+                                    : "Withdraw"}
                               </button>
                             ))}
                           </div>
@@ -1182,7 +1286,7 @@ function Configuration({ organizations, action }) {
 function WorkspaceIcon({ tab }) {
   const Icon =
     {
-      Overview: LayoutDashboard,
+      Home: LayoutDashboard,
       Organizations: Building2,
       Elections: Vote,
       Voters: Users,

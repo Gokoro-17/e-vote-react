@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import {
   ArrowRight,
   ArrowLeft,
@@ -96,6 +97,21 @@ export default function CreateElection({ organizations, onCreated }) {
       setBusy(false);
     }
   };
+
+  if (!organizations.length)
+    return (
+      <div className="panel first-step-card">
+        <span className="eyebrow">FIRST STEP</span>
+        <h2>Create your organization first.</h2>
+        <p className="muted">
+          Your organization owns its elections, members, branding, and plan.
+          This takes less than a minute.
+        </p>
+        <Link className="btn" to="/workspace/organizations">
+          Create organization <ArrowRight size={16} />
+        </Link>
+      </div>
+    );
 
   return (
     <div className="election-wizard">

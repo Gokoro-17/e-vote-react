@@ -441,8 +441,13 @@ select:focus-visible {
   border: 0;
   background: transparent;
   color: var(--muted);
-  width: 42px;
+  width: auto;
   height: 42px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding-inline: 8px;
+  font-size: 11px;
 }
 .menu-toggle {
   display: none;
@@ -1905,6 +1910,10 @@ dd {
 .dashboard-actions svg {
   color: var(--primary);
 }
+.dashboard-prompt {
+  font-size: 18px;
+  margin-bottom: 16px;
+}
 .tabs {
   display: flex;
   gap: 27px;
@@ -2307,6 +2316,33 @@ dd {
 .workspace-content > .grid > .f {
   margin-bottom: 0;
 }
+.workspace-guide {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 32px;
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--line));
+  background:
+    linear-gradient(
+      120deg,
+      color-mix(in srgb, var(--primary) 8%, transparent),
+      transparent 55%
+    ),
+    var(--paper);
+}
+.workspace-guide > div {
+  max-width: 640px;
+}
+.workspace-guide h3,
+.workspace-guide p {
+  margin-bottom: 8px;
+}
+.workspace-guide > .btn {
+  flex-shrink: 0;
+}
+.workspace-election-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
 .election-selector {
   display: flex;
   align-items: center;
@@ -2322,6 +2358,84 @@ dd {
 }
 .election-selector .row {
   gap: 12px;
+}
+.election-flow-nav {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 22px;
+}
+.election-flow-nav button {
+  min-height: 48px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--paper);
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  font-size: 11px;
+}
+.election-flow-nav button.current {
+  border-color: var(--primary);
+  color: var(--ink);
+  background: var(--soft);
+}
+.election-flow-nav button span {
+  width: 23px;
+  height: 23px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--soft);
+  color: var(--primary);
+  font-size: 10px;
+}
+.election-flow-nav button.current span {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+.election-next-step {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 28px;
+}
+.election-next-step > div {
+  min-width: 0;
+}
+.election-next-step h3 {
+  margin: 14px 0 7px;
+}
+.election-next-step p {
+  max-width: 700px;
+  margin-bottom: 10px;
+}
+.election-next-step > .btn {
+  flex-shrink: 0;
+}
+.position-summary-list > .row h3 {
+  margin: 0;
+}
+.position-summary-list > div:not(.row) {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 15px 0;
+  border-top: 1px solid var(--line);
+}
+.position-summary-list > div:not(.row) span {
+  color: var(--muted);
+  font-size: 11px;
+  text-align: right;
+}
+.first-step-card {
+  max-width: 680px;
+  padding: 34px !important;
+}
+.first-step-card h2 {
+  font-size: 30px;
 }
 .election-wizard {
   max-width: 840px;
@@ -2980,6 +3094,22 @@ dd {
   .dashboard-actions span {
     font-size: 11px;
   }
+  .workspace-guide,
+  .election-next-step {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .workspace-guide > .btn,
+  .election-next-step > .btn {
+    width: 100%;
+  }
+  .workspace-election-list {
+    grid-template-columns: 1fr;
+  }
+  .election-flow-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .organization-hero {
     gap: 22px;
     align-items: start;
@@ -3484,6 +3614,25 @@ dd {
   }
   .workspace-sidebar nav {
     gap: 4px;
+  }
+  .election-flow-nav {
+    gap: 6px;
+  }
+  .election-flow-nav button {
+    justify-content: flex-start;
+    padding: 10px;
+    font-size: 10px;
+  }
+  .position-summary-list > div:not(.row) {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .position-summary-list > div:not(.row) span {
+    text-align: left;
+  }
+  .first-step-card {
+    padding: 25px 20px !important;
   }
   .workspace-content .f fieldset > .grid {
     gap: 17px;

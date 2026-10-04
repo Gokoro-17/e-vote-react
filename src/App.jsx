@@ -114,15 +114,14 @@ export default function App() {
             className={open ? "open" : ""}
             aria-label="Main navigation"
           >
-            <NavLink to="/elections">Elections</NavLink>
+            <NavLink to="/elections">Find elections</NavLink>
             <NavLink to="/organizations">Organizations</NavLink>
-            <NavLink to="/security">Security</NavLink>
             <NavLink to="/pricing">Pricing</NavLink>
             {user ? (
               <>
-                <NavLink to="/dashboard">My dashboard</NavLink>
+                <NavLink to="/dashboard">My votes</NavLink>
                 <NavLink className="nav-cta" to="/workspace">
-                  Workspace <ArrowUpRight size={16} />
+                  Organize <ArrowUpRight size={16} />
                 </NavLink>
                 <button
                   className="nav-button"
@@ -130,6 +129,7 @@ export default function App() {
                   onClick={() => logout().catch((e) => setError(e.message))}
                 >
                   <LogOut size={18} />
+                  <span>Sign out</span>
                 </button>
               </>
             ) : (
@@ -138,7 +138,7 @@ export default function App() {
                   Sign in
                 </NavLink>
                 <Link className="nav-cta" to="/register">
-                  Get started <ArrowUpRight size={16} />
+                  Create account <ArrowUpRight size={16} />
                 </Link>
               </>
             )}
