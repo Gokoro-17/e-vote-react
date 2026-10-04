@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, useRef, useId } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import {
   AlertCircle,
   CheckCircle2,
@@ -249,7 +249,10 @@ export function Badge({ value }) {
   );
 }
 export function RequireAccount({ children }) {
-  const { user, needsMfa, loading } = useStore();
+  const { user, needsMfa, loading } = useStore(),
+    location = useLocation(),
+    next = location.pathname + location.search,
+    returnQuery = "?next=" + encodeURIComponent(next);
   if (loading) return <Loading>Checking your account…</Loading>;
   if (!user)
     return (
@@ -260,7 +263,7 @@ export function RequireAccount({ children }) {
           Your account connects you to your organizations, elections, and voting
           history.
         </p>
-        <Link className="btn" to="/login">
+        <Link className="btn" to={"/login" + returnQuery}>
           Sign in <ArrowUpRight size={17} />
         </Link>
       </div>
@@ -270,7 +273,7 @@ export function RequireAccount({ children }) {
       <div className="pg narrow">
         <h1>One more security check</h1>
         <p>Enter the code from your authenticator to continue.</p>
-        <Link className="btn" to="/two-factor">
+        <Link className="btn" to={"/two-factor" + returnQuery}>
           Verify authenticator
         </Link>
       </div>
@@ -279,7 +282,7 @@ export function RequireAccount({ children }) {
     return (
       <div className="pg narrow">
         <h1>Finish creating your account</h1>
-        <Link className="btn" to="/onboarding">
+        <Link className="btn" to={"/onboarding" + returnQuery}>
           Continue
         </Link>
       </div>

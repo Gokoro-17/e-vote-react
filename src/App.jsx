@@ -115,7 +115,6 @@ export default function App() {
             aria-label="Main navigation"
           >
             <NavLink to="/elections">Find elections</NavLink>
-            <NavLink to="/organizations">Organizations</NavLink>
             <NavLink to="/pricing">Pricing</NavLink>
             {user ? (
               <>

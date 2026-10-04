@@ -16,9 +16,19 @@ function databaseConnection() {
   try {
     const url = new URL(process.env.DATABASE_URL);
     url.searchParams.set("sslmode", "require");
-    url.searchParams.set("sslaccept", "strict");
+    // Vercel and other production hosts must validate the full certificate
+    // chain. Some Windows development machines cannot validate the Supabase
+    // pooler's AWS chain, so local traffic still requires TLS but uses Prisma's
+    // development-compatible certificate handling.
+    url.searchParams.set(
+      "sslaccept",
+      process.env.NODE_ENV === "production" ? "strict" : "accept_invalid_certs",
+    );
     url.searchParams.set("schema", "evote");
-    if (process.env.SUPABASE_CA_CERT_PATH)
+    if (
+      process.env.NODE_ENV === "production" &&
+      process.env.SUPABASE_CA_CERT_PATH
+    )
       url.searchParams.set(
         "sslcert",
         path.resolve(process.env.SUPABASE_CA_CERT_PATH),

@@ -24,7 +24,7 @@ export async function authAvailability() {
       `${process.env.SUPABASE_URL}/auth/v1/settings`,
       {
         headers: { apikey: process.env.SUPABASE_PUBLISHABLE_KEY },
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(10000),
       },
     );
     if (!response.ok) throw new Error("Provider unavailable");

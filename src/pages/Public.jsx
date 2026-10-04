@@ -99,24 +99,15 @@ export function Explore() {
   );
   return (
     <div className="pg">
-      <PageHeading
-        eyebrow="MAKE YOUR VOICE COUNT"
-        title="Find your next election."
-        action={
-          <Link className="btn alt" to="/workspace/elections">
-            Create an election <ArrowUpRight size={17} />
-          </Link>
-        }
-      >
-        Discover voting events, meet candidates, and take part in your
-        community.
+      <PageHeading eyebrow="ELECTIONS" title="Find your election.">
+        Search by election, organization, candidate, or category.
       </PageHeading>
       <div className="toolbar">
         <div className="search-input">
           <Search size={19} />
           <input
             aria-label="Search elections, organizations, candidates and categories"
-            placeholder="Search elections, organizations, candidates…"
+            placeholder="Type a name to search…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
@@ -189,8 +180,7 @@ export function Election() {
     [error, setError] = useState(""),
     [message, setMessage] = useState(""),
     [registered, setRegistered] = useState(false),
-    [busy, setBusy] = useState(false),
-    [showApply, setApply] = useState(false);
+    [busy, setBusy] = useState(false);
   const e = election.data;
   const register = async () => {
     setBusy(true);
@@ -239,12 +229,6 @@ export function Election() {
         )}
       </div>
     );
-  const closed = [
-    "VOTING_CLOSED",
-    "RESULTS_PENDING",
-    "RESULTS_PUBLISHED",
-    "ARCHIVED",
-  ].includes(e.status);
   return (
     <div className="pg">
       <Link className="back-link" to="/elections">
@@ -288,6 +272,72 @@ export function Election() {
               <span>·</span>
               {e.timezone}
             </p>
+            <div className="row election-primary-actions">
+              {e.status === "VOTING_OPEN" && (
+                <Link
+                  className="btn"
+                  to={
+                    user
+                      ? "/elections/" + e.slug + "/vote"
+                      : "/login?next=" +
+                        encodeURIComponent("/elections/" + e.slug + "/vote")
+                  }
+                >
+                  {user ? "Vote now" : "Sign in to vote"}
+                  <ArrowRight size={17} />
+                </Link>
+              )}
+              {e.status === "REGISTRATION_OPEN" &&
+                (user ? (
+                  <button
+                    className="btn"
+                    disabled={busy || registered}
+                    onClick={register}
+                  >
+                    {registered
+                      ? "Registration complete"
+                      : busy
+                        ? "Registering…"
+                        : "Register to vote"}
+                  </button>
+                ) : (
+                  <Link
+                    className="btn"
+                    to={
+                      "/login?next=" +
+                      encodeURIComponent("/elections/" + e.slug)
+                    }
+                  >
+                    Sign in to register <ArrowRight size={17} />
+                  </Link>
+                ))}
+              {["RESULTS_PUBLISHED", "ARCHIVED"].includes(e.status) && (
+                <Link
+                  className="btn alt"
+                  to={"/elections/" + e.slug + "/results"}
+                >
+                  View results <ArrowUpRight size={16} />
+                </Link>
+              )}
+              <button
+                type="button"
+                className="btn alt"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(
+                      window.location.origin + "/elections/" + e.slug,
+                    );
+                    setMessage("Election link copied.");
+                  } catch {
+                    setError(
+                      "Copy the election page URL from your address bar.",
+                    );
+                  }
+                }}
+              >
+                Copy link
+              </button>
+            </div>
             {e.mode === "ELECTION_DEMO" && (
               <div className="notice">
                 Formal-election demonstration. Official government use requires
@@ -307,10 +357,12 @@ export function Election() {
                   <div className="position-heading">
                     <h3>{p.title}</h3>
                     <span>
-                      {status(p.method)} ·{" "}
-                      {p.maxVotes === 1
-                        ? "One submission per voter"
-                        : "Up to " + p.maxVotes + " submissions"}
+                      {p.method === "RANKED"
+                        ? "Rank candidates in order"
+                        : ["SINGLE", "WEIGHTED"].includes(p.method)
+                          ? "Choose one candidate"
+                          : "Choose up to " + p.maxChoices}
+                      {p.maxVotes > 1 && ` · ${p.maxVotes} submissions allowed`}
                     </span>
                   </div>
                   {p.candidates.length ? (
@@ -359,61 +411,55 @@ export function Election() {
           </section>
           {user &&
             ["REGISTRATION_OPEN", "VOTING_UPCOMING"].includes(e.status) && (
-              <section className="s">
-                <button
-                  className="btn alt"
-                  onClick={() => setApply(!showApply)}
+              <details className="panel candidate-application">
+                <summary>Want to stand as a candidate?</summary>
+                <ActionForm
+                  className="f"
+                  onSubmit={(f) =>
+                    api("/elections/" + e.id + "/candidates", {
+                      ...f,
+                      socialLinks: f.socialLinks
+                        ? f.socialLinks.split("\n").filter(Boolean)
+                        : [],
+                    })
+                  }
+                  success="Your profile has been submitted for approval. You can upload your photo from Account."
                 >
-                  Stand as a candidate <ArrowRight size={17} />
-                </button>
-                {showApply && (
-                  <ActionForm
-                    onSubmit={(f) =>
-                      api("/elections/" + e.id + "/candidates", {
-                        ...f,
-                        socialLinks: f.socialLinks
-                          ? f.socialLinks.split("\n").filter(Boolean)
-                          : [],
-                      })
-                    }
-                    success="Your profile has been submitted for approval. You can upload your photo from Account."
-                  >
-                    <h3>Submit your candidate profile</h3>
-                    <Field label="Position">
-                      <select name="positionId" required>
-                        {e.positions.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.title}
-                          </option>
-                        ))}
-                      </select>
-                    </Field>
-                    <Field
-                      label="Full name"
-                      name="name"
-                      defaultValue={user.name}
-                      minLength={2}
-                      required
-                    />
-                    <Field label="Biography">
-                      <textarea name="bio" maxLength={2000} />
-                    </Field>
-                    <Field label="Manifesto">
-                      <textarea name="manifesto" maxLength={5000} />
-                    </Field>
-                    <Field label="Campaign statement">
-                      <textarea name="campaign" maxLength={2000} />
-                    </Field>
-                    <Field label="Campaign links, one URL per line">
-                      <textarea name="socialLinks" />
-                    </Field>
-                    <button className="btn">Submit for approval</button>
-                  </ActionForm>
-                )}
-              </section>
+                  <h3>Submit your candidate profile</h3>
+                  <Field label="Position">
+                    <select name="positionId" required>
+                      {e.positions.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.title}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field
+                    label="Full name"
+                    name="name"
+                    defaultValue={user.name}
+                    minLength={2}
+                    required
+                  />
+                  <Field label="Biography">
+                    <textarea name="bio" maxLength={2000} />
+                  </Field>
+                  <Field label="Manifesto">
+                    <textarea name="manifesto" maxLength={5000} />
+                  </Field>
+                  <Field label="Campaign statement">
+                    <textarea name="campaign" maxLength={2000} />
+                  </Field>
+                  <Field label="Campaign links, one URL per line">
+                    <textarea name="socialLinks" />
+                  </Field>
+                  <button className="btn">Submit for approval</button>
+                </ActionForm>
+              </details>
             )}
-          <section className="s">
-            <h2>Election questions</h2>
+          <details className="panel election-help">
+            <summary>Election rules and common questions</summary>
             {[
               ...(e.faq || []),
               {
@@ -432,7 +478,7 @@ export function Election() {
                 <p>{item.answer}</p>
               </details>
             ))}
-          </section>
+          </details>
         </div>
         <aside className="election-aside">
           <div className="panel voting-summary">
@@ -460,38 +506,11 @@ export function Election() {
                 </div>
               </div>
             )}
-            {e.status === "REGISTRATION_OPEN" && user && (
-              <button
-                className="btn btn-full"
-                disabled={busy || registered}
-                onClick={register}
-              >
-                {registered
-                  ? "Registration recorded"
-                  : busy
-                    ? "Registering…"
-                    : "Register to participate"}
-              </button>
-            )}
-            <Link
-              className={"btn btn-full " + (closed ? "alt" : "")}
-              to={"/elections/" + e.slug + "/vote"}
-            >
-              {e.status === "VOTING_OPEN" ? "Vote now" : "Your voting page"}{" "}
-              <ArrowRight size={17} />
-            </Link>
-            <Link
-              className="text-link"
-              to={"/elections/" + e.slug + "/results"}
-            >
-              View results <ArrowUpRight size={16} />
-            </Link>
           </div>
-          <div className="panel eligibility-summary">
-            <ShieldCheck size={24} />
-            <h3>Who can participate?</h3>
+          <details className="panel eligibility-summary">
+            <summary>Who can vote?</summary>
             <ul>
-              <li>Confirmed account and approved election registration</li>
+              <li>Confirmed account and approved registration</li>
               {e.minAge > 0 && (
                 <li>
                   At least {e.minAge} years old, using verified date of birth
@@ -511,7 +530,7 @@ export function Election() {
               Results: {status(e.resultVisibility)}
               {e.publishAt && " · " + date(e.publishAt, e.timezone)}
             </p>
-          </div>
+          </details>
           <div className="share-election">
             <QrCode size={22} />
             <div>

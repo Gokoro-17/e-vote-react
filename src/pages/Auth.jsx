@@ -32,6 +32,15 @@ import {
   Badge,
   ImageUpload,
 } from "../components.jsx";
+const localReturnPath = (value) =>
+  value?.startsWith("/") &&
+  !value.startsWith("//") &&
+  !value.includes("\\") &&
+  !/[\r\n]/.test(value)
+    ? value
+    : "";
+const withReturnPath = (path, next) =>
+  path + (next ? "?next=" + encodeURIComponent(next) : "");
 function GoogleMark() {
   return (
     <svg width="19" height="19" viewBox="0 0 24 24" aria-hidden="true">
@@ -61,12 +70,14 @@ export function Auth({ register = false }) {
     [params] = useSearchParams(),
     [googleError, setGoogleError] = useState(""),
     [googleBusy, setGoogleBusy] = useState(false);
+  const safeNext = localReturnPath(params.get("next"));
   const google = async (form) => {
     setGoogleBusy(true);
     setGoogleError("");
     try {
       const data = await api("/auth/google", {
         captcha: new FormData(form).get("captcha") || "",
+        next: safeNext || undefined,
       });
       window.location.assign(data.url);
     } catch (e) {
@@ -76,41 +87,7 @@ export function Auth({ register = false }) {
     }
   };
   return (
-    <div className="pg auth-layout">
-      <div className="auth-story">
-        <span className="eyebrow">A PLACE FOR EVERY VOICE</span>
-        <h1>
-          {register ? (
-            <>
-              Good decisions
-              <br />
-              start with people.
-            </>
-          ) : (
-            <>
-              Your community.
-              <br />
-              Your voice.
-            </>
-          )}
-        </h1>
-        <p className="sub">
-          One thoughtful workspace for the elections that matter to your
-          organization.
-        </p>
-        <div className="auth-promise">
-          <ShieldCheck size={28} />
-          <div>
-            <b>Confidence at every step</b>
-            <p>
-              Verified access. Private ballots. A clear record of participation.
-            </p>
-          </div>
-        </div>
-        <Link className="text-link" to="/security">
-          Explore our approach to security <ArrowRight size={16} />
-        </Link>
-      </div>
+    <div className="pg auth-layout auth-simple">
       <ActionForm
         className="f auth-panel"
         success=""
@@ -120,27 +97,32 @@ export function Auth({ register = false }) {
           const result = await auth(register ? "register" : "login", {
             ...f,
             consent: f.consent === "on",
+            next: safeNext || undefined,
           });
           if (register)
-            go("/verify-email?email=" + encodeURIComponent(f.email));
+            go(
+              "/verify-email?email=" +
+                encodeURIComponent(f.email) +
+                (safeNext ? "&next=" + encodeURIComponent(safeNext) : ""),
+            );
           else
             go(
               result.needsMfa
-                ? "/two-factor"
+                ? withReturnPath("/two-factor", safeNext)
                 : result.user.consentAt
-                  ? "/dashboard"
-                  : "/onboarding",
+                  ? safeNext || "/dashboard"
+                  : withReturnPath("/onboarding", safeNext),
             );
         }}
       >
-        <span className="eyebrow">
-          {register ? "LET’S GET STARTED" : "WELCOME BACK"}
-        </span>
+        <Link className="auth-back" to="/">
+          <ArrowLeft size={15} /> Back to home
+        </Link>
         <h2>{register ? "Create an account" : "Sign in to E-Vote"}</h2>
         <p className="muted">
           {register
-            ? "Create your account, then confirm your email."
-            : "Pick up where you left off."}
+            ? "Use Google or your email address."
+            : "Use Google or enter your email and password."}
         </p>
         {!configured && (
           <Feedback error="Account access is awaiting the administrator’s Supabase configuration." />
@@ -224,11 +206,15 @@ export function Auth({ register = false }) {
         <p className="auth-switch">
           {register ? (
             <>
-              Have an account? <Link to="/login">Sign in</Link>
+              Have an account?{" "}
+              <Link to={withReturnPath("/login", safeNext)}>Sign in</Link>
             </>
           ) : (
             <>
-              New here? <Link to="/register">Create an account</Link>
+              New here?{" "}
+              <Link to={withReturnPath("/register", safeNext)}>
+                Create an account
+              </Link>
             </>
           )}
         </p>
@@ -240,6 +226,7 @@ export function VerifyEmail() {
   const [params] = useSearchParams(),
     { auth } = useStore(),
     go = useNavigate();
+  const safeNext = localReturnPath(params.get("next"));
   return (
     <div className="pg narrow">
       <div className="auth-icon">
@@ -261,7 +248,7 @@ export function VerifyEmail() {
             to sign in.
           </p>
         </div>
-        <Link className="btn alt" to="/login">
+        <Link className="btn alt" to={withReturnPath("/login", safeNext)}>
           Go to sign in
         </Link>
       </div>
@@ -273,10 +260,10 @@ export function VerifyEmail() {
             const result = await auth("verify-email", f);
             go(
               result.needsMfa
-                ? "/two-factor"
+                ? withReturnPath("/two-factor", safeNext)
                 : result.user.consentAt
-                  ? "/dashboard"
-                  : "/onboarding",
+                  ? safeNext || "/dashboard"
+                  : withReturnPath("/onboarding", safeNext),
             );
           }}
           success=""
@@ -323,7 +310,7 @@ export function VerifyEmail() {
           <button className="btn alt">Resend confirmation</button>
         </ActionForm>
       </details>
-      <Link className="text-link" to="/login">
+      <Link className="text-link" to={withReturnPath("/login", safeNext)}>
         <ArrowLeft size={16} /> Back to sign in
       </Link>
     </div>
@@ -405,7 +392,9 @@ export function ResetPassword() {
 }
 export function Onboarding() {
   const { user, auth } = useStore(),
-    go = useNavigate();
+    go = useNavigate(),
+    [params] = useSearchParams();
+  const safeNext = localReturnPath(params.get("next"));
   return (
     <div className="pg narrow">
       <PageHeading eyebrow="WELCOME TO E-VOTE" title="One last step.">
@@ -420,7 +409,7 @@ export function Onboarding() {
               name: f.name,
               consent: f.consent === "on",
             });
-            go("/dashboard");
+            go(safeNext || "/dashboard");
           }}
         >
           <Field
@@ -447,7 +436,7 @@ export function Onboarding() {
           </button>
         </ActionForm>
       ) : (
-        <Link className="btn" to="/login">
+        <Link className="btn" to={withReturnPath("/login", safeNext)}>
           Sign in to continue
         </Link>
       )}
@@ -457,7 +446,9 @@ export function Onboarding() {
 export function TwoFactor() {
   const { user, refresh } = useStore(),
     security = useLoad(user ? "/auth/security" : null),
-    go = useNavigate();
+    go = useNavigate(),
+    [params] = useSearchParams();
+  const safeNext = localReturnPath(params.get("next"));
   const factors =
     security.data?.factors.filter((f) => f.status === "verified") || [];
   return (
@@ -469,7 +460,7 @@ export function TwoFactor() {
         Enter the six-digit code from your authenticator app.
       </PageHeading>
       {!user ? (
-        <Link className="btn" to="/login">
+        <Link className="btn" to={withReturnPath("/login", safeNext)}>
           Sign in
         </Link>
       ) : security.loading ? (
@@ -482,7 +473,11 @@ export function TwoFactor() {
           onSubmit={async (f) => {
             await api("/auth/mfa/verify", f);
             await refresh();
-            go(user.consentAt ? "/dashboard" : "/onboarding");
+            go(
+              user.consentAt
+                ? safeNext || "/dashboard"
+                : withReturnPath("/onboarding", safeNext),
+            );
           }}
         >
           <Field label="Authenticator">

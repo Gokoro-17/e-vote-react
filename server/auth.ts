@@ -33,6 +33,45 @@ const email = z
   .max(254)
   .transform((value) => value.toLowerCase());
 const password = z.string().min(12, "Use at least 12 characters.").max(128);
+const nextPath = z
+  .string()
+  .max(1000)
+  .refine(
+    (value) =>
+      value.startsWith("/") &&
+      !value.startsWith("//") &&
+      !value.includes("\\") &&
+      !/[\r\n]/.test(value),
+    "Invalid return path.",
+  )
+  .optional();
+function rememberNext(res: Response, next?: string) {
+  if (!next) return;
+  res.cookie(
+    "evote-auth-next",
+    encrypt(JSON.stringify({ next, expires: Date.now() + 60 * 60000 })),
+    {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60000,
+    },
+  );
+}
+function takeNext(req: any, res: Response) {
+  const value = req.cookies?.["evote-auth-next"];
+  if (!value) return "";
+  res.clearCookie("evote-auth-next", { path: "/" });
+  try {
+    const data = JSON.parse(decrypt(value).toString());
+    return data.expires > Date.now() && nextPath.safeParse(data.next).success
+      ? data.next
+      : "";
+  } catch {
+    return "";
+  }
+}
 export const safeUser = (u: any) => ({
   id: u.id,
   name: u.name,
@@ -200,6 +239,7 @@ export function mountAuth(
           name: z.string().trim().min(2).max(100),
           dob: z.string().date().optional(),
           consent: z.literal(true),
+          next: nextPath,
         })
         .parse(req.body);
       if (input.dob && new Date(input.dob) > new Date())
@@ -231,6 +271,7 @@ export function mountAuth(
         );
       }
       if (data.user && data.user.identities?.length) {
+        rememberNext(res, input.next);
         await db.authRegistration.upsert({
           where: { id: data.user.id },
           create: {
@@ -276,7 +317,11 @@ export function mountAuth(
     route(async (req, res) => {
       await bot(req);
       const input = z
-        .object({ email, password: z.string().min(1).max(128) })
+        .object({
+          email,
+          password: z.string().min(1).max(128),
+          next: nextPath,
+        })
         .parse(req.body);
       const failures = await db.securityEvent.count({
         where: {
@@ -288,7 +333,10 @@ export function mountAuth(
       if (failures >= 8)
         fail("Too many sign-in attempts. Try again in 15 minutes.", 429);
       const client = (req.supabase ??= supabaseForRequest(req, res));
-      const { error } = await client.auth.signInWithPassword(input);
+      const { error } = await client.auth.signInWithPassword({
+        email: input.email,
+        password: input.password,
+      });
       if (error) {
         if (error.status === 429)
           fail("Too many sign-in attempts. Please try again shortly.", 429);
@@ -324,6 +372,7 @@ export function mountAuth(
     authLimit,
     route(async (req, res) => {
       await bot(req);
+      const { next } = z.object({ next: nextPath }).parse(req.body);
       if (!(await authAvailability()).googleEnabled)
         fail(
           "Google sign-in has not been enabled by the platform administrator yet.",
@@ -343,6 +392,7 @@ export function mountAuth(
           "Google sign-in is unavailable. Ask the administrator to enable the Google provider in Supabase Auth.",
           503,
         );
+      rememberNext(res, next);
       res.json({ url: data.url });
     }),
   );
@@ -384,12 +434,14 @@ export function mountAuth(
           }
         } catch {}
       }
+      const next = takeNext(req, res),
+        suffix = next ? "?next=" + encodeURIComponent(next) : "";
       res.redirect(
         result.needsMfa
-          ? "/two-factor"
+          ? "/two-factor" + suffix
           : result.user.consentAt
-            ? "/dashboard"
-            : "/onboarding",
+            ? next || "/dashboard"
+            : "/onboarding" + suffix,
       );
     }),
   );

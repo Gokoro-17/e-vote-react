@@ -776,6 +776,199 @@ select:focus-visible {
   font-size: 11px;
   margin-top: 18px;
 }
+.simple-hero {
+  min-height: min(680px, calc(100vh - 105px));
+  align-items: center;
+  padding-block: 42px;
+}
+.simple-hero .hero-copy {
+  max-width: 620px;
+}
+.simple-hero h1 {
+  font-size: clamp(48px, 5.8vw, 76px);
+  line-height: 1.02;
+  margin-bottom: 24px;
+}
+.simple-hero .sub {
+  max-width: 560px;
+}
+.hero-help {
+  margin: 18px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.journey-section {
+  padding-block: 78px;
+  border-block: 1px solid var(--line);
+}
+.simple-heading {
+  max-width: 640px;
+  margin-bottom: 28px;
+}
+.simple-heading h2 {
+  margin: 0;
+}
+.journey-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+.journey-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 22px;
+  padding: 34px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--paper);
+}
+.journey-icon {
+  height: 52px;
+  width: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--soft);
+  color: var(--primary);
+}
+.journey-card .eyebrow {
+  margin-bottom: 8px;
+}
+.journey-card h3 {
+  font-size: 28px;
+}
+.journey-card ol {
+  margin: 0 0 26px;
+  padding: 0;
+  list-style: none;
+  counter-reset: journey;
+}
+.journey-card li {
+  counter-increment: journey;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding-block: 9px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.journey-card li:before {
+  content: counter(journey);
+  height: 23px;
+  width: 23px;
+  flex: 0 0 23px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--primary);
+  font-size: 9px;
+}
+.compact-section {
+  max-width: 960px;
+  margin-inline: auto;
+}
+.simple-trust {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 70px;
+  align-items: center;
+  padding: 48px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--paper);
+}
+.simple-trust h2,
+.simple-plan h2 {
+  font-size: clamp(29px, 3.2vw, 42px);
+}
+.simple-trust > div:first-child > p {
+  font-size: 13px;
+}
+.trust-points p {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 17px 0;
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.trust-points p:last-child {
+  border-bottom: 0;
+}
+.trust-points svg {
+  color: var(--primary);
+}
+.simple-plan {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 30px;
+  padding-block: 44px;
+  border-block: 1px solid var(--line);
+}
+.simple-plan h2,
+.simple-plan p {
+  margin-bottom: 7px;
+}
+.simple-plan > .btn {
+  flex-shrink: 0;
+}
+.simple-statistics {
+  margin-block: 60px;
+}
+.simple-faq {
+  display: grid;
+  grid-template-columns: minmax(0, 0.6fr) minmax(0, 1fr);
+  gap: 70px;
+}
+.simple-faq details {
+  border-top: 1px solid var(--line);
+}
+.simple-faq details:last-child {
+  border-bottom: 1px solid var(--line);
+}
+.simple-faq summary {
+  cursor: pointer;
+  padding: 20px 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.simple-faq details p {
+  margin: -5px 0 22px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.simple-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 35px;
+  padding: 40px 44px;
+  margin-block: 70px;
+  border-radius: 7px;
+  background: var(--brand-gradient);
+  color: var(--on-primary);
+}
+.simple-cta h2 {
+  margin: 12px 0 5px;
+  font-size: 34px;
+}
+.simple-cta p {
+  margin: 0;
+  color: #25432b;
+  font-size: 12px;
+}
+.simple-cta .row {
+  flex-shrink: 0;
+}
+.simple-dark-btn {
+  background: #0b251b;
+  border-color: #0b251b;
+  color: #f1f4e9;
+}
 .panel {
   background: var(--paper);
   border: 1px solid var(--line);
@@ -1188,6 +1381,23 @@ dd {
   margin-inline: auto;
   min-height: 660px;
 }
+.auth-layout.auth-simple {
+  display: block;
+  max-width: 500px;
+  min-height: auto;
+  padding-top: 70px;
+}
+.auth-simple .auth-panel {
+  width: 100%;
+}
+.auth-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 11px;
+  margin-bottom: 4px;
+}
 .auth-story h1 {
   font-size: 53px;
   line-height: 1.12;
@@ -1573,6 +1783,36 @@ dd {
   gap: 7px;
   font-size: 11px;
   color: var(--muted);
+}
+.election-primary-actions {
+  margin-top: 22px;
+}
+.candidate-application,
+.election-help {
+  margin-top: 24px;
+}
+.candidate-application > summary,
+.election-help > summary,
+.eligibility-summary > summary {
+  cursor: pointer;
+  font-weight: 650;
+}
+.candidate-application[open] > summary,
+.election-help[open] > summary,
+.eligibility-summary[open] > summary {
+  margin-bottom: 20px;
+}
+.election-help > details {
+  padding-block: 15px;
+  border-top: 1px solid var(--line);
+}
+.election-help > details:last-child {
+  border-bottom: 1px solid var(--line);
+}
+.election-help > details p {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 12px;
 }
 .election-aside {
   min-width: 0;
@@ -2832,6 +3072,36 @@ dd {
     padding-block: 43px 38px;
     gap: 36px;
   }
+  .simple-hero {
+    min-height: auto;
+  }
+  .simple-hero h1 {
+    font-size: clamp(45px, 10vw, 62px);
+  }
+  .journey-section {
+    padding-block: 55px;
+  }
+  .journey-grid,
+  .simple-trust,
+  .simple-faq {
+    grid-template-columns: 1fr;
+  }
+  .simple-trust,
+  .simple-faq {
+    gap: 28px;
+  }
+  .simple-trust {
+    padding: 30px;
+  }
+  .simple-plan,
+  .simple-cta {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .simple-cta .row,
+  .simple-cta .btn {
+    width: 100%;
+  }
   .hero h1 {
     font-size: clamp(43px, 8vw, 63px);
     line-height: 1.09;
@@ -3019,6 +3289,9 @@ dd {
   }
   .election-layout > div .s {
     margin-block: 38px;
+  }
+  .election-primary-actions .btn {
+    flex: 1 1 190px;
   }
   .candidate-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3255,6 +3528,42 @@ dd {
   .hero {
     padding-top: 35px;
     gap: 30px;
+  }
+  .simple-hero h1 {
+    font-size: 44px;
+  }
+  .hero-help {
+    font-size: 12px;
+    line-height: 1.7;
+  }
+  .journey-card {
+    grid-template-columns: 1fr;
+    padding: 25px 21px;
+  }
+  .journey-card h3 {
+    font-size: 24px;
+  }
+  .journey-card li,
+  .simple-faq details p,
+  .simple-trust > div:first-child > p,
+  .trust-points p {
+    font-size: 13px;
+  }
+  .simple-trust {
+    padding: 26px 22px;
+  }
+  .simple-plan > .btn {
+    width: 100%;
+  }
+  .simple-cta {
+    padding: 30px 24px;
+  }
+  .simple-cta h2 {
+    font-size: 28px;
+  }
+  .election-primary-actions,
+  .election-primary-actions .btn {
+    width: 100%;
   }
   .hero-kicker {
     font-size: 7px;
