@@ -16,6 +16,8 @@ import {
   CreditCard,
   Copy,
   Trash2,
+  CheckCircle2,
+  CircleAlert,
 } from "lucide-react";
 import CreateElection from "./CreateElection.jsx";
 import Billing from "./Billing.jsx";
@@ -41,7 +43,6 @@ import {
   ImageUpload,
 } from "../components.jsx";
 const next = {
-  DRAFT: "REGISTRATION_OPEN",
   REGISTRATION_OPEN: "VOTING_UPCOMING",
   VOTING_UPCOMING: "VOTING_OPEN",
   VOTING_OPEN: "VOTING_CLOSED",
@@ -58,6 +59,122 @@ const labels = {
   RESULTS_PUBLISHED: "Publish results",
   ARCHIVED: "Archive election",
 };
+function electionWorkflow(e) {
+  const now = Date.now(),
+    votingStart = new Date(e.votingStart).getTime(),
+    votingEnd = new Date(e.votingEnd).getTime(),
+    ballotReady = e.positions.length > 0,
+    candidatesReady =
+      ballotReady &&
+      e.positions.every((position) =>
+        position.candidates.some(
+          (candidate) => candidate.status === "APPROVED",
+        ),
+      );
+  if (e.status === "DRAFT") {
+    if (!ballotReady)
+      return {
+        title: "Add the ballot",
+        detail: "Create at least one position or category before launch.",
+        label: "Add ballot position",
+        kind: "position",
+        ballotReady,
+        candidatesReady,
+        datesReady: now < votingEnd,
+      };
+    if (!candidatesReady)
+      return {
+        title: "Add the candidates",
+        detail: "Every position needs at least one approved candidate.",
+        label: "Add candidates",
+        kind: "candidates",
+        ballotReady,
+        candidatesReady,
+        datesReady: now < votingEnd,
+      };
+    if (now >= votingEnd)
+      return {
+        title: "Your voting dates have passed",
+        detail:
+          "Choose a new opening and closing time, save the draft, then launch it.",
+        label: "Update voting dates",
+        kind: "dates",
+        ballotReady,
+        candidatesReady,
+        datesReady: false,
+      };
+    const registrationStart = e.registrationStart
+      ? new Date(e.registrationStart).getTime()
+      : null;
+    const registrationEnd = e.registrationEnd
+      ? new Date(e.registrationEnd).getTime()
+      : null;
+    const registrationIsOpen =
+      now < votingStart &&
+      (registrationStart || registrationEnd) &&
+      (!registrationEnd || now < registrationEnd);
+    return {
+      title:
+        now >= votingStart
+          ? "Ready to start voting"
+          : registrationIsOpen
+            ? "Ready to open registration"
+            : "Ready to publish",
+      detail:
+        now >= votingStart
+          ? "One click will publish the election and let eligible voters cast ballots."
+          : registrationIsOpen
+            ? "Publish the election and begin accepting voter registrations."
+            : "Publish the election page now. Voting will open automatically at the scheduled time.",
+      label:
+        now >= votingStart
+          ? "Start voting now"
+          : registrationIsOpen
+            ? "Open voter registration"
+            : "Publish and schedule",
+      kind: "state",
+      target: "LAUNCH",
+      ballotReady,
+      candidatesReady,
+      datesReady: true,
+    };
+  }
+  if (e.status === "VOTING_UPCOMING" && now < votingStart)
+    return {
+      title: "Election is scheduled",
+      detail: `Voting will open automatically on ${date(e.votingStart, e.timezone)}. Share the election link with voters now.`,
+      label: "Waiting for voting time",
+      kind: "waiting",
+    };
+  if (e.status === "VOTING_UPCOMING" && now >= votingEnd)
+    return {
+      title: "The voting window has ended",
+      detail: "Refresh the workspace to update the election status.",
+      label: "Refresh status",
+      kind: "refresh",
+    };
+  const target = next[e.status];
+  return {
+    title: target ? `Next: ${labels[target]}` : "Election complete",
+    detail:
+      e.status === "REGISTRATION_OPEN"
+        ? "Invite voters and review eligibility requests, then finish registration."
+        : e.status === "VOTING_UPCOMING"
+          ? "The voting window is open. Start accepting ballots now."
+          : e.status === "VOTING_OPEN"
+            ? "Voting is live. Share the link and monitor participation."
+            : e.status === "VOTING_CLOSED"
+              ? "Voting is closed. Calculate the final result totals."
+              : e.status === "RESULTS_PENDING"
+                ? "Review the totals, then publish them for voters."
+                : e.status === "RESULTS_PUBLISHED"
+                  ? "Results are public. Archive the election when your work is finished."
+                  : "This election is archived and available for your records.",
+    label: target ? labels[target] : "",
+    kind: target ? "state" : "complete",
+    target,
+  };
+}
 export default function Admin() {
   const go = useNavigate(),
     location = useLocation(),
@@ -86,13 +203,14 @@ export default function Admin() {
     [message, setMessage] = useState("");
   const d = dashboard.data,
     e = d?.elections.find((e) => e.id === selected) || d?.elections[0],
-    org = orgId || d?.organizations[0]?.id;
+    org = orgId || d?.organizations[0]?.id,
+    workflow = e ? electionWorkflow(e) : null;
   const reload = () => dashboard.load();
-  const action = async (fn) => {
+  const action = async (fn, success = "Action completed.") => {
     try {
       setError("");
       await fn();
-      setMessage("Action completed.");
+      setMessage(success);
       reload();
     } catch (err) {
       setError(err.message);
@@ -216,7 +334,7 @@ export default function Admin() {
                         : !d.elections.length
                           ? "Set the voting dates and add the positions people will vote for."
                           : firstDraft
-                            ? "Add candidates, review the public page, then open registration when you are ready."
+                            ? "Open the election checklist. E-Vote will show exactly what is missing and the one button to launch it."
                             : "Review participation or create another election whenever you need one."}
                     </p>
                   </div>
@@ -228,7 +346,7 @@ export default function Admin() {
                         : !d.elections.length
                           ? "/workspace/new"
                           : firstDraft
-                            ? "/workspace/candidates"
+                            ? "/workspace/elections"
                             : "/workspace/elections"
                     }
                     onClick={() => firstDraft && setSelected(firstDraft.id)}
@@ -289,6 +407,7 @@ export default function Admin() {
               <OrganizationAdmin
                 organizations={d.organizations}
                 reload={reload}
+                canAdmin={canAdmin}
               />
             )}
             {tab === "Billing" && (
@@ -408,62 +527,106 @@ export default function Admin() {
                   <div>
                     <span className="eyebrow">CURRENT STATUS</span>
                     <span className="pill">{status(e.status)}</span>
-                    <h3>
-                      {next[e.status]
-                        ? `Next: ${labels[next[e.status]]}`
-                        : "Election complete"}
-                    </h3>
-                    <p className="muted">
-                      {e.status === "DRAFT"
-                        ? "Add your candidates and check the public page before opening registration."
-                        : e.status === "REGISTRATION_OPEN"
-                          ? "Invite voters and review eligibility requests."
-                          : e.status === "VOTING_UPCOMING"
-                            ? "Registration is complete. Open voting when the scheduled time arrives."
-                            : e.status === "VOTING_OPEN"
-                              ? "Voting is live. Monitor participation, then close it when the period ends."
-                              : e.status === "VOTING_CLOSED"
-                                ? "Voting is closed. Calculate the final result totals."
-                                : e.status === "RESULTS_PENDING"
-                                  ? "Review the totals, then publish them for voters."
-                                  : e.status === "RESULTS_PUBLISHED"
-                                    ? "Results are public. Archive the election when your work is finished."
-                                    : "This election is archived and available for your records."}
-                    </p>
+                    <h3>{workflow.title}</h3>
+                    <p className="muted">{workflow.detail}</p>
+                    {e.status === "DRAFT" && (
+                      <ul className="launch-checklist">
+                        {[
+                          [workflow.ballotReady, "Ballot position added"],
+                          [
+                            workflow.candidatesReady,
+                            "Approved candidate added to every position",
+                          ],
+                          [workflow.datesReady, "Voting dates are still valid"],
+                        ].map(([ready, label]) => (
+                          <li
+                            className={ready ? "ready" : "needs-work"}
+                            key={label}
+                          >
+                            {ready ? (
+                              <CheckCircle2 size={17} />
+                            ) : (
+                              <CircleAlert size={17} />
+                            )}
+                            {label}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                     <small className="muted">
                       Voting: {date(e.votingStart, e.timezone)} –{" "}
                       {date(e.votingEnd, e.timezone)}
                     </small>
+                    {e.access === "PRIVATE" && (
+                      <p className="private-election-note">
+                        <b>Private election:</b> invite voters from the Voters
+                        step before sharing the link. The link alone does not
+                        grant access.
+                      </p>
+                    )}
                   </div>
-                  {next[e.status] && canAdmin(e.organizationId) && (
-                    <button
-                      className="btn"
-                      onClick={() => {
-                        if (
-                          [
-                            "VOTING_CLOSED",
-                            "RESULTS_PUBLISHED",
-                            "ARCHIVED",
-                          ].includes(next[e.status]) &&
-                          !window.confirm(
-                            labels[next[e.status]] +
-                              "? This changes the election for every participant.",
+                  {workflow.kind !== "complete" &&
+                    canAdmin(e.organizationId) && (
+                      <button
+                        className="btn"
+                        disabled={workflow.kind === "waiting"}
+                        onClick={() => {
+                          if (workflow.kind === "candidates") {
+                            setTab("Candidates");
+                            return;
+                          }
+                          if (workflow.kind === "position") {
+                            document
+                              .querySelector(".ballot-position-form")
+                              ?.scrollIntoView({ behavior: "smooth" });
+                            return;
+                          }
+                          if (workflow.kind === "dates") {
+                            const settings = document.getElementById(
+                              `draft-settings-${e.id}`,
+                            );
+                            if (settings) {
+                              settings.open = true;
+                              settings.scrollIntoView({ behavior: "smooth" });
+                            }
+                            return;
+                          }
+                          if (workflow.kind === "refresh") {
+                            reload();
+                            return;
+                          }
+                          if (
+                            [
+                              "VOTING_CLOSED",
+                              "RESULTS_PUBLISHED",
+                              "ARCHIVED",
+                            ].includes(workflow.target) &&
+                            !window.confirm(
+                              workflow.label +
+                                "? This changes the election for every participant.",
+                            )
                           )
-                        )
-                          return;
-                        action(() =>
-                          api(`/elections/${e.id}/state`, {
-                            status: next[e.status],
-                          }),
-                        );
-                      }}
-                    >
-                      {labels[next[e.status]]}
-                    </button>
-                  )}
+                            return;
+                          action(
+                            () =>
+                              api(`/elections/${e.id}/state`, {
+                                status: workflow.target,
+                              }),
+                            workflow.target === "LAUNCH"
+                              ? e.access === "PRIVATE"
+                                ? "Election launched. Invite voters, then share its link."
+                                : "Election launched. You can now share its link with voters."
+                              : `${workflow.label} completed.`,
+                          );
+                        }}
+                      >
+                        {workflow.label}
+                      </button>
+                    )}
                 </div>
                 {e.status === "DRAFT" && canAdmin(e.organizationId) && (
                   <ActionForm
+                    className="f panel ballot-position-form"
                     onSubmit={(f) =>
                       save(`/elections/${e.id}/positions`, {
                         ...f,
@@ -553,6 +716,31 @@ export default function Admin() {
             )}
             {tab === "Candidates" && e && (
               <>
+                {e.status === "DRAFT" && (
+                  <div className="panel candidate-setup-guide">
+                    <div>
+                      <span className="eyebrow">STEP 2 OF 3</span>
+                      <h3>
+                        {workflow.candidatesReady
+                          ? "Your candidates are ready"
+                          : "Add the candidates voters can choose"}
+                      </h3>
+                      <p className="muted">
+                        {workflow.candidatesReady
+                          ? "Review the checklist and launch the election when your dates are ready."
+                          : "Add at least one candidate to every ballot position."}
+                      </p>
+                    </div>
+                    {workflow.candidatesReady && (
+                      <button
+                        className="btn"
+                        onClick={() => setTab("Elections")}
+                      >
+                        Review and launch <ArrowUpRight size={16} />
+                      </button>
+                    )}
+                  </div>
+                )}
                 {canAdmin(e.organizationId) &&
                   ["DRAFT", "REGISTRATION_OPEN", "VOTING_UPCOMING"].includes(
                     e.status,
@@ -1077,7 +1265,7 @@ function DraftSettings({ election: e, save, onDelete }) {
       .slice(0, 16);
   };
   return (
-    <details className="panel">
+    <details className="panel" id={`draft-settings-${e.id}`}>
       <summary>Edit election</summary>
       <ActionForm
         onSubmit={(f) => {

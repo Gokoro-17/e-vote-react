@@ -969,6 +969,43 @@ select:focus-visible {
   border-color: #0b251b;
   color: #f1f4e9;
 }
+.install-app-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 22px;
+  padding: 26px 30px;
+  margin-block: 0 58px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--paper);
+}
+.install-app-icon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--primary);
+  background: var(--soft);
+}
+.install-app-card h2 {
+  margin: 5px 0;
+  font-size: 22px;
+}
+.install-app-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.install-app-card .install-help {
+  margin-top: 10px;
+  color: var(--ink);
+  line-height: 1.7;
+}
+.install-app-card > .btn {
+  white-space: nowrap;
+}
 .panel {
   background: var(--paper);
   border: 1px solid var(--line);
@@ -2012,6 +2049,19 @@ dd {
   margin-top: auto;
   font-size: 11px;
 }
+.organization-card .danger-link {
+  margin-top: 14px;
+  color: #d78a7d;
+}
+.organization-delete {
+  width: 100%;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+.organization-delete .row {
+  flex-wrap: wrap;
+}
 .organization-card-heading {
   display: flex;
   align-items: center;
@@ -2655,6 +2705,54 @@ dd {
 .election-next-step > .btn {
   flex-shrink: 0;
 }
+.launch-checklist {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  margin: 18px 0;
+  list-style: none;
+}
+.launch-checklist li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.launch-checklist .ready svg {
+  color: var(--primary);
+}
+.launch-checklist .needs-work svg {
+  color: #e3a26e;
+}
+.private-election-note {
+  max-width: 620px;
+  margin: 16px 0 0;
+  padding: 11px 13px;
+  border-left: 3px solid var(--primary);
+  background: var(--soft);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+.private-election-note b {
+  color: var(--ink);
+}
+.candidate-setup-guide {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+}
+.candidate-setup-guide h3 {
+  margin: 8px 0;
+}
+.candidate-setup-guide p {
+  margin-bottom: 0;
+}
+.candidate-setup-guide .btn {
+  flex-shrink: 0;
+}
 .position-summary-list > .row h3 {
   margin: 0;
 }
@@ -3094,12 +3192,14 @@ dd {
     padding: 30px;
   }
   .simple-plan,
-  .simple-cta {
+  .simple-cta,
+  .install-app-card {
     align-items: flex-start;
     flex-direction: column;
   }
   .simple-cta .row,
-  .simple-cta .btn {
+  .simple-cta .btn,
+  .install-app-card > .btn {
     width: 100%;
   }
   .hero h1 {
@@ -3368,13 +3468,15 @@ dd {
     font-size: 11px;
   }
   .workspace-guide,
-  .election-next-step {
+  .election-next-step,
+  .candidate-setup-guide {
     align-items: stretch;
     flex-direction: column;
     gap: 18px;
   }
   .workspace-guide > .btn,
-  .election-next-step > .btn {
+  .election-next-step > .btn,
+  .candidate-setup-guide > .btn {
     width: 100%;
   }
   .workspace-election-list {
@@ -3560,6 +3662,10 @@ dd {
   }
   .simple-cta h2 {
     font-size: 28px;
+  }
+  .install-app-card {
+    grid-template-columns: 1fr;
+    padding: 25px 22px;
   }
   .election-primary-actions,
   .election-primary-actions .btn {

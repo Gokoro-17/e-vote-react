@@ -13,11 +13,20 @@
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/index" },
     {
-      "source": "/((?!api(?:/|$)|assets(?:/|$)).*)",
+      "source": "/((?!api(?:/|$)|assets(?:/|$)|manifest\.webmanifest$|sw\.js$|icon-(?:192|512)\.png$|favicon\.svg$).*)",
       "destination": "/index.html"
     }
   ],
   "headers": [
+    {
+      "source": "/sw.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        }
+      ]
+    },
     {
       "source": "/(.*)",
       "headers": [

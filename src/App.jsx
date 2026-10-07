@@ -15,6 +15,8 @@ import {
   ArrowUpRight,
   LogOut,
   ShieldCheck,
+  Download,
+  Smartphone,
 } from "lucide-react";
 import { useStore } from "./store.jsx";
 import Home from "./pages/Home.jsx";
@@ -49,6 +51,11 @@ export default function App() {
     configuration = useLoad("/public/config"),
     [open, setOpen] = useState(false),
     [error, setError] = useState(""),
+    [installPrompt, setInstallPrompt] = useState(null),
+    [installHelp, setInstallHelp] = useState(false),
+    [standalone, setStandalone] = useState(
+      () => window.matchMedia("(display-mode: standalone)").matches,
+    ),
     location = useLocation(),
     navigate = useNavigate(),
     menuButton = useRef(null),
@@ -82,6 +89,33 @@ export default function App() {
     navRef.current?.querySelector("a")?.focus();
     return () => document.removeEventListener("keydown", handler);
   }, [open]);
+  useEffect(() => {
+    const ready = (event) => {
+        event.preventDefault();
+        setInstallPrompt(event);
+      },
+      installed = () => {
+        setInstallPrompt(null);
+        setInstallHelp(false);
+        setStandalone(true);
+      };
+    window.addEventListener("beforeinstallprompt", ready);
+    window.addEventListener("appinstalled", installed);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", ready);
+      window.removeEventListener("appinstalled", installed);
+    };
+  }, []);
+  const installApp = async () => {
+    if (!installPrompt) {
+      setInstallHelp(true);
+      return;
+    }
+    await installPrompt.prompt();
+    const choice = await installPrompt.userChoice;
+    setInstallPrompt(null);
+    if (choice.outcome !== "accepted") setInstallHelp(true);
+  };
   const privatePage = (element) => <RequireAccount>{element}</RequireAccount>;
   return (
     <>
@@ -220,6 +254,35 @@ export default function App() {
           />
         </Routes>
       </main>
+      {location.pathname === "/" && !standalone && (
+        <section
+          className="wrap install-app-card"
+          aria-labelledby="install-title"
+        >
+          <span className="install-app-icon">
+            <Smartphone size={24} />
+          </span>
+          <div>
+            <span className="eyebrow">USE IT LIKE AN APP</span>
+            <h2 id="install-title">Add E-Vote to your home screen</h2>
+            <p>
+              Open elections faster in a standalone window from your phone or
+              computer.
+            </p>
+            {installHelp && (
+              <p className="install-help" role="status">
+                On iPhone or iPad, open E-Vote in Safari, tap Share, then Add to
+                Home Screen. On Android, open the browser menu and choose
+                Install app or Add to Home screen.
+              </p>
+            )}
+          </div>
+          <button className="btn alt" type="button" onClick={installApp}>
+            <Download size={17} />
+            {installPrompt ? "Install E-Vote" : "How to install"}
+          </button>
+        </section>
+      )}
       <footer className="site-footer">
         <div className="wrap">
           <div className="footer-grid">

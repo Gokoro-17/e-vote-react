@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Plus, ArrowUpRight, Users } from "lucide-react";
+import { Plus, ArrowUpRight, Users, Trash2 } from "lucide-react";
 import { api } from "../store.jsx";
 import {
   ActionForm,
@@ -43,7 +43,8 @@ export function EligibilityGroup({
     </Field>
   );
 }
-export function OrganizationAdmin({ organizations, reload }) {
+export function OrganizationAdmin({ organizations, reload, canAdmin }) {
+  const [removing, setRemoving] = useState("");
   return (
     <>
       <div className="grid two-columns">
@@ -97,6 +98,58 @@ export function OrganizationAdmin({ organizations, reload }) {
                 <Link className="text-link" to={"/organizations/" + o.slug}>
                   Public profile <ArrowUpRight size={16} />
                 </Link>
+                {canAdmin(o.id) &&
+                  (removing === o.id ? (
+                    <ActionForm
+                      className="f organization-delete"
+                      success=""
+                      onSubmit={async (form) => {
+                        await api(
+                          "/organizations/" + o.id,
+                          { confirmation: form.confirmation },
+                          "DELETE",
+                        );
+                        setRemoving("");
+                        await reload();
+                      }}
+                    >
+                      <p className="muted">
+                        This removes the profile, members, requests, and draft
+                        elections. Organizations with active elections or
+                        billing records cannot be deleted.
+                      </p>
+                      <Field
+                        label={`Type ${o.name} to confirm`}
+                        name="confirmation"
+                        autoComplete="off"
+                        required
+                      />
+                      <div className="row">
+                        <button className="btn danger">
+                          Permanently delete
+                        </button>
+                        <button
+                          type="button"
+                          className="btn alt"
+                          onClick={() => setRemoving("")}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                      <small className="muted">
+                        If you signed in more than 10 minutes ago, sign in again
+                        before retrying.
+                      </small>
+                    </ActionForm>
+                  ) : (
+                    <button
+                      type="button"
+                      className="text-link danger-link"
+                      onClick={() => setRemoving(o.id)}
+                    >
+                      <Trash2 size={15} /> Delete organization
+                    </button>
+                  ))}
               </article>
             ))}
           </div>

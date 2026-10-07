@@ -6,6 +6,8 @@ import {
   validateChoices,
   tally,
   transitions,
+  launchTarget,
+  scheduledStatus,
 } from "./engine.js";
 test("age uses exact birthday including leap-day edge", () => {
   assert.equal(ageOn(new Date("2008-10-03"), new Date("2026-10-02")), 17);
@@ -111,6 +113,82 @@ test("archived and completed elections cannot reopen", () => {
   assert.deepEqual(transitions.ARCHIVED, []);
   assert.equal(transitions.VOTING_CLOSED.includes("DRAFT"), false);
   assert.equal(transitions.RESULTS_PUBLISHED.includes("VOTING_OPEN"), false);
+});
+test("launch selects the simple next phase from the configured schedule", () => {
+  const base = {
+    status: "DRAFT",
+    votingStart: new Date("2026-10-07T12:00:00Z"),
+    votingEnd: new Date("2026-10-07T18:00:00Z"),
+  };
+  assert.equal(
+    launchTarget(base, new Date("2026-10-07T10:00:00Z")),
+    "VOTING_UPCOMING",
+  );
+  assert.equal(
+    launchTarget(base, new Date("2026-10-07T13:00:00Z")),
+    "VOTING_OPEN",
+  );
+  assert.equal(
+    launchTarget(
+      {
+        ...base,
+        registrationStart: new Date("2026-10-07T08:00:00Z"),
+        registrationEnd: new Date("2026-10-07T11:00:00Z"),
+      },
+      new Date("2026-10-07T10:00:00Z"),
+    ),
+    "REGISTRATION_OPEN",
+  );
+  assert.equal(
+    launchTarget(
+      {
+        ...base,
+        registrationStart: new Date("2026-10-07T11:00:00Z"),
+        registrationEnd: new Date("2026-10-07T11:45:00Z"),
+      },
+      new Date("2026-10-07T10:00:00Z"),
+    ),
+    "VOTING_UPCOMING",
+  );
+  assert.throws(
+    () => launchTarget(base, new Date("2026-10-07T19:00:00Z")),
+    /dates have passed/,
+  );
+});
+test("published elections follow registration and voting dates automatically", () => {
+  const election = {
+    status: "VOTING_UPCOMING",
+    registrationStart: new Date("2026-10-07T09:00:00Z"),
+    registrationEnd: new Date("2026-10-07T11:00:00Z"),
+    votingStart: new Date("2026-10-07T12:00:00Z"),
+    votingEnd: new Date("2026-10-07T18:00:00Z"),
+  };
+  assert.equal(
+    scheduledStatus(election, new Date("2026-10-07T08:00:00Z")),
+    "VOTING_UPCOMING",
+  );
+  assert.equal(
+    scheduledStatus(election, new Date("2026-10-07T10:00:00Z")),
+    "REGISTRATION_OPEN",
+  );
+  assert.equal(
+    scheduledStatus(
+      { ...election, status: "REGISTRATION_OPEN" },
+      new Date("2026-10-07T11:30:00Z"),
+    ),
+    "VOTING_UPCOMING",
+  );
+  assert.equal(
+    scheduledStatus(election, new Date("2026-10-07T13:00:00Z")),
+    "VOTING_OPEN",
+  );
+  assert.equal(
+    scheduledStatus(
+      { ...election, status: "VOTING_OPEN" },
+      new Date("2026-10-07T19:00:00Z"),
+    ),
+    "VOTING_CLOSED",
+  );
 });
 test("formal demonstrations require verified unique identity", () => {
   assert.match(

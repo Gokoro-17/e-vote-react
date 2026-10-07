@@ -8,6 +8,50 @@ export const transitions: Record<string, string[]> = {
   RESULTS_PUBLISHED: ["ARCHIVED"],
   ARCHIVED: [],
 };
+export function launchTarget(e: any, now = new Date()) {
+  if (e.status !== "DRAFT")
+    throw new Error("Only a draft election can be launched.");
+  const votingStart = new Date(e.votingStart),
+    votingEnd = new Date(e.votingEnd),
+    registrationStart = e.registrationStart
+      ? new Date(e.registrationStart)
+      : null,
+    registrationEnd = e.registrationEnd ? new Date(e.registrationEnd) : null;
+  if (now >= votingEnd)
+    throw new Error(
+      "The voting dates have passed. Update the schedule before launching.",
+    );
+  if (
+    now < votingStart &&
+    (registrationStart || registrationEnd) &&
+    (!registrationStart || now >= registrationStart) &&
+    (!registrationEnd || now < registrationEnd)
+  )
+    return "REGISTRATION_OPEN";
+  if (now < votingStart) return "VOTING_UPCOMING";
+  return "VOTING_OPEN";
+}
+export function scheduledStatus(e: any, now = new Date()) {
+  if (
+    !["REGISTRATION_OPEN", "VOTING_UPCOMING", "VOTING_OPEN"].includes(e.status)
+  )
+    return e.status;
+  const votingStart = new Date(e.votingStart),
+    votingEnd = new Date(e.votingEnd);
+  if (now >= votingEnd) return "VOTING_CLOSED";
+  if (e.status === "VOTING_OPEN") return "VOTING_OPEN";
+  if (now >= votingStart) return "VOTING_OPEN";
+  const registrationStart = e.registrationStart
+      ? new Date(e.registrationStart)
+      : null,
+    registrationEnd = e.registrationEnd ? new Date(e.registrationEnd) : null,
+    hasRegistration = Boolean(registrationStart || registrationEnd),
+    registrationActive =
+      hasRegistration &&
+      (!registrationStart || now >= registrationStart) &&
+      (!registrationEnd || now < registrationEnd);
+  return registrationActive ? "REGISTRATION_OPEN" : "VOTING_UPCOMING";
+}
 export function ageOn(dob: Date, now = new Date()) {
   let age = now.getUTCFullYear() - dob.getUTCFullYear();
   if (

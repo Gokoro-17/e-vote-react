@@ -9,7 +9,7 @@ import {
 } from "node:crypto";
 import nodemailer from "nodemailer";
 import { supabaseAdmin } from "./supabase.js";
-import { eligibilityReason } from "./engine.js";
+import { eligibilityReason, scheduledStatus } from "./engine.js";
 import path from "node:path";
 function databaseConnection() {
   if (!process.env.DATABASE_URL) return undefined;
@@ -243,23 +243,21 @@ export async function maintenance(deadline = Infinity) {
   await db.rateBucket.deleteMany({ where: { resetAt: { lt: new Date() } } });
   const elections = await db.election.findMany({
     where: {
-      status: { in: ["VOTING_UPCOMING", "VOTING_OPEN", "RESULTS_PENDING"] },
+      status: {
+        in: [
+          "REGISTRATION_OPEN",
+          "VOTING_UPCOMING",
+          "VOTING_OPEN",
+          "RESULTS_PENDING",
+        ],
+      },
       organization: { suspended: false },
     },
   });
   for (const e of elections) {
     if (Date.now() + 20000 >= deadline) return;
     let status = e.status;
-    if (
-      status === "VOTING_UPCOMING" &&
-      e.votingStart <= new Date() &&
-      e.votingEnd > new Date()
-    )
-      status = "VOTING_OPEN";
-    if (status === "VOTING_UPCOMING" && e.votingEnd <= new Date())
-      status = "VOTING_CLOSED";
-    if (status === "VOTING_OPEN" && e.votingEnd <= new Date())
-      status = "VOTING_CLOSED";
+    status = scheduledStatus(e);
     if (
       status === "RESULTS_PENDING" &&
       e.resultVisibility === "DELAYED" &&
@@ -286,8 +284,8 @@ export async function maintenance(deadline = Infinity) {
         )
           return;
         const counts =
-          e.status === "VOTING_UPCOMING"
-            ? await eligibilityCounts(e, tx)
+          status === "VOTING_OPEN"
+            ? await eligibilityCounts(current, tx)
             : null;
         const changed = await tx.election.updateMany({
           where: { id: e.id, status: e.status },

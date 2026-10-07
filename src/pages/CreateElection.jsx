@@ -487,8 +487,8 @@ export default function CreateElection({ organizations, onCreated }) {
                 </p>
               ))}
               <p className="notice">
-                This creates a draft. Add candidates and review it before you
-                open registration.
+                Next, add the candidates. E-Vote will then show one clear button
+                to publish the election or start voting at the scheduled time.
               </p>
             </div>
           )}
@@ -508,7 +508,7 @@ export default function CreateElection({ organizations, onCreated }) {
               {busy
                 ? "Creating election…"
                 : step === phases.length - 1
-                  ? "Create draft"
+                  ? "Create election"
                   : "Continue"}{" "}
               <ArrowRight size={16} />
             </button>

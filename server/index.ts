@@ -43,6 +43,7 @@ import {
   validateChoices,
   tally,
   transitions,
+  launchTarget,
 } from "./engine.js";
 const app = express(),
   production = process.env.NODE_ENV === "production";
@@ -439,6 +440,113 @@ app.patch(
     });
     await logAudit(req.user.id, "BRANDING_UPDATED", org.id);
     res.json(org);
+  }),
+);
+app.delete(
+  "/api/organizations/:id",
+  route(async (req, res) => {
+    const u = requireUser(req);
+    await access(req, req.params.id, ["ADMIN"]);
+    const { confirmation } = z
+      .object({ confirmation: z.string().trim().min(1).max(100) })
+      .parse(req.body);
+    if (req.session.reauthenticatedAt < new Date(Date.now() - 10 * 60000))
+      fail("Sign in again before deleting an organization.", 403);
+    await serializable(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM evote."Organization" WHERE id=${req.params.id} FOR UPDATE`;
+      const organization = await tx.organization.findUnique({
+        where: { id: req.params.id },
+        include: {
+          elections: { select: { id: true, status: true } },
+          _count: { select: { subscriptions: true, payments: true } },
+        },
+      });
+      if (!organization || organization.suspended)
+        fail("Organization not found.", 404);
+      if (confirmation !== organization.name)
+        fail(`Type ${organization.name} exactly to confirm deletion.`);
+      if (organization._count.subscriptions || organization._count.payments)
+        fail(
+          "This organization has billing records. Cancel its subscription and contact support before deletion.",
+        );
+      if (organization.elections.some((e) => e.status !== "DRAFT"))
+        fail(
+          "An organization with an active or completed election cannot be deleted. Archive those elections and contact support if removal is required.",
+        );
+      const electionIds = organization.elections.map((e) => e.id);
+      if (electionIds.length) {
+        const [ballots, participation, receipts, eligibility, verification] =
+          await Promise.all([
+            tx.ballot.count({
+              where: { position: { electionId: { in: electionIds } } },
+            }),
+            tx.voteStatus.count({
+              where: { position: { electionId: { in: electionIds } } },
+            }),
+            tx.voteReceipt.count({
+              where: { position: { electionId: { in: electionIds } } },
+            }),
+            tx.voterEligibility.count({
+              where: { electionId: { in: electionIds } },
+            }),
+            tx.verificationRequest.count({
+              where: { electionId: { in: electionIds } },
+            }),
+          ]);
+        if (ballots || participation || receipts || eligibility || verification)
+          fail(
+            "This organization has protected participation records and cannot be deleted.",
+          );
+        await tx.notificationCampaign.deleteMany({
+          where: { electionId: { in: electionIds } },
+        });
+        await tx.invitation.deleteMany({
+          where: { electionId: { in: electionIds } },
+        });
+        await tx.electionActivity.deleteMany({
+          where: { electionId: { in: electionIds } },
+        });
+        await tx.candidate.deleteMany({
+          where: { position: { electionId: { in: electionIds } } },
+        });
+        await tx.electionPosition.deleteMany({
+          where: { electionId: { in: electionIds } },
+        });
+        await tx.election.deleteMany({ where: { id: { in: electionIds } } });
+      }
+      await tx.organizationJoinRequest.deleteMany({
+        where: { organizationId: organization.id },
+      });
+      await tx.organizationGroup.deleteMany({
+        where: { organizationId: organization.id },
+      });
+      await tx.organizationMember.deleteMany({
+        where: { organizationId: organization.id },
+      });
+      await tx.organization.update({
+        where: { id: organization.id },
+        data: {
+          name: "Deleted organization",
+          slug: `deleted-${organization.id}`,
+          description: "",
+          logo: "",
+          contact: "",
+          welcome: "",
+          verified: false,
+          suspended: true,
+          plan: "FREE",
+        },
+      });
+      await audit(
+        u.id,
+        "ORGANIZATION_DELETED",
+        organization.id,
+        undefined,
+        "SUCCESS",
+        tx,
+      );
+    });
+    res.json({ ok: true });
   }),
 );
 app.get(
@@ -1114,8 +1222,22 @@ app.post(
   route(async (req, res) => {
     const e = await getElection(req.params.id);
     await access(req, e.organizationId, ["ADMIN"]);
-    const { status } = z.object({ status: z.string() }).parse(req.body);
-    if (!transitions[e.status]?.includes(status))
+    const { status: requestedStatus } = z
+      .object({ status: z.string() })
+      .parse(req.body);
+    const targetFor = (election: any) => {
+      if (requestedStatus !== "LAUNCH") return requestedStatus;
+      try {
+        return launchTarget(election);
+      } catch (error: any) {
+        fail(error.message);
+      }
+    };
+    let status = targetFor(e);
+    if (
+      requestedStatus !== "LAUNCH" &&
+      !transitions[e.status]?.includes(status)
+    )
       fail("Invalid election state transition.");
     if (
       ["REGISTRATION_OPEN", "VOTING_UPCOMING", "VOTING_OPEN"].includes(
@@ -1144,7 +1266,7 @@ app.post(
       new Date() < e.publishAt
     )
       fail("The configured publication date has not arrived.");
-    await serializable(async (tx) => {
+    status = await serializable(async (tx) => {
       await tx.$queryRaw`SELECT id FROM evote."Election" WHERE id=${e.id} FOR UPDATE`;
       const current = await tx.election.findUnique({
         where: { id: e.id },
@@ -1152,9 +1274,15 @@ app.post(
       });
       if (current?.status !== e.status)
         fail("Election state changed. Refresh.");
+      const committedStatus = targetFor(current);
+      if (
+        requestedStatus !== "LAUNCH" &&
+        !transitions[current.status]?.includes(committedStatus)
+      )
+        fail("Invalid election state transition.");
       if (
         ["REGISTRATION_OPEN", "VOTING_UPCOMING", "VOTING_OPEN"].includes(
-          status,
+          committedStatus,
         ) &&
         (!current.positions.length ||
           current.positions.some(
@@ -1163,11 +1291,13 @@ app.post(
       )
         fail("Every position needs an approved candidate.");
       const counts =
-        status === "VOTING_OPEN" ? await eligibilityCounts(current, tx) : null;
+        committedStatus === "VOTING_OPEN"
+          ? await eligibilityCounts(current, tx)
+          : null;
       const updated = await tx.election.updateMany({
         where: { id: e.id, status: e.status },
         data: {
-          status,
+          status: committedStatus,
           ...(counts
             ? {
                 registeredAtOpen: counts.registered,
@@ -1177,23 +1307,31 @@ app.post(
         },
       });
       if (!updated.count) fail("Election state changed. Refresh.");
-      if (status === "RESULTS_PENDING")
+      if (committedStatus === "RESULTS_PENDING")
         await tx.electionResult.create({
           data: {
             electionId: e.id,
             data: (await calculate(current, tx)) as any,
           },
         });
-      await audit(req.user.id, status, e.organizationId, e.id, "SUCCESS", tx);
+      await audit(
+        req.user.id,
+        committedStatus,
+        e.organizationId,
+        e.id,
+        "SUCCESS",
+        tx,
+      );
       await tx.notificationCampaign.create({
         data: {
           electionId: e.id,
-          title: status,
-          message: `${e.name}: ${status.replaceAll("_", " ").toLowerCase()}`,
+          title: committedStatus,
+          message: `${e.name}: ${committedStatus.replaceAll("_", " ").toLowerCase()}`,
         },
       });
+      return committedStatus;
     });
-    res.json({ ok: true });
+    res.json({ ok: true, status });
   }),
 );
 app.post(
