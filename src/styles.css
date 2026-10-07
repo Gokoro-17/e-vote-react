@@ -33,6 +33,10 @@
   --paper: #102b22;
   --soft: #18382c;
   --accent: #b9dc94;
+  --app-safe-top: 0px;
+  --app-safe-right: 0px;
+  --app-safe-bottom: 0px;
+  --app-safe-left: 0px;
 }
 * {
   box-sizing: border-box;
@@ -40,6 +44,35 @@
 body {
   margin: 0;
   min-height: 100vh;
+}
+html.installed-app {
+  --app-safe-top: env(safe-area-inset-top, 0px);
+  --app-safe-right: env(safe-area-inset-right, 0px);
+  --app-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --app-safe-left: env(safe-area-inset-left, 0px);
+  min-height: 100%;
+  max-width: 100%;
+  overflow-x: clip;
+  scroll-padding-top: calc(82px + var(--app-safe-top));
+}
+html.installed-app body,
+html.installed-app #root {
+  min-height: 100dvh;
+}
+html.installed-app body {
+  max-width: 100%;
+  overflow-x: clip;
+  padding-inline: var(--app-safe-left) var(--app-safe-right);
+  overscroll-behavior-y: contain;
+}
+html.installed-app .site-header {
+  padding-top: var(--app-safe-top);
+}
+html.installed-app .site-footer {
+  padding-bottom: calc(24px + var(--app-safe-bottom));
+}
+html.installed-app .skip:focus {
+  top: calc(12px + var(--app-safe-top));
 }
 button,
 input,
@@ -2988,6 +3021,16 @@ dd {
     overflow-y: auto;
     box-shadow: 0 10px 20px #00000033;
   }
+  html.installed-app {
+    scroll-padding-top: calc(72px + var(--app-safe-top));
+  }
+  html.installed-app .header-inner nav {
+    top: calc(71px + var(--app-safe-top));
+    max-height: calc(
+      100dvh - 80px - var(--app-safe-top) - var(--app-safe-bottom)
+    );
+    padding-bottom: max(16px, var(--app-safe-bottom));
+  }
   .header-inner nav.open {
     display: flex;
   }
@@ -3619,6 +3662,13 @@ dd {
   .header-inner nav {
     top: 66px;
     padding: 14px 16px;
+  }
+  html.installed-app {
+    scroll-padding-top: calc(67px + var(--app-safe-top));
+  }
+  html.installed-app .header-inner nav {
+    top: calc(66px + var(--app-safe-top));
+    padding-bottom: max(14px, var(--app-safe-bottom));
   }
   .brand {
     font-size: 21px;

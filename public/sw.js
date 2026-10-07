@@ -1,4 +1,4 @@
-const CACHE = "evote-shell-v1";
+const CACHE = "evote-shell-v2";
 const SHELL = [
   "/",
   "/favicon.svg",

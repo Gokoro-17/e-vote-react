@@ -46,6 +46,9 @@ import Dashboard from "./pages/Dashboard.jsx";
 import Pricing from "./pages/Pricing.jsx";
 import { Information, Contact } from "./pages/Information.jsx";
 import { RequireAccount, Feedback, useLoad } from "./components.jsx";
+const isStandalone = () =>
+  window.matchMedia("(display-mode: standalone)").matches ||
+  window.navigator.standalone === true;
 export default function App() {
   const { user, logout } = useStore(),
     configuration = useLoad("/public/config"),
@@ -53,9 +56,7 @@ export default function App() {
     [error, setError] = useState(""),
     [installPrompt, setInstallPrompt] = useState(null),
     [installHelp, setInstallHelp] = useState(false),
-    [standalone, setStandalone] = useState(
-      () => window.matchMedia("(display-mode: standalone)").matches,
-    ),
+    [standalone, setStandalone] = useState(isStandalone),
     location = useLocation(),
     navigate = useNavigate(),
     menuButton = useRef(null),
@@ -90,7 +91,9 @@ export default function App() {
     return () => document.removeEventListener("keydown", handler);
   }, [open]);
   useEffect(() => {
-    const ready = (event) => {
+    const displayMode = window.matchMedia("(display-mode: standalone)"),
+      syncStandalone = () => setStandalone(isStandalone()),
+      ready = (event) => {
         event.preventDefault();
         setInstallPrompt(event);
       },
@@ -101,9 +104,11 @@ export default function App() {
       };
     window.addEventListener("beforeinstallprompt", ready);
     window.addEventListener("appinstalled", installed);
+    displayMode.addEventListener?.("change", syncStandalone);
     return () => {
       window.removeEventListener("beforeinstallprompt", ready);
       window.removeEventListener("appinstalled", installed);
+      displayMode.removeEventListener?.("change", syncStandalone);
     };
   }, []);
   const installApp = async () => {
