@@ -70,13 +70,13 @@ Official reference: [Supabase Google OAuth guide](https://supabase.com/docs/guid
 
 Application SMTP is separate from Supabase Auth email configuration. Set SMTP_URL and MAIL_FROM on the API host for invitations, verification decisions, voting receipts and published-results notifications. Outbox bodies are encrypted. Election announcements are batched through durable campaigns; account settings control optional email notices. In-app notices work without an email transport.
 
-A real confirmed user can create an organization. There are no default login credentials. To appoint the first platform administrator after their real account is verified:
+A real confirmed user can create an organization. There are no default login credentials. Before appointing the first platform administrator, the user must verify their email, finish onboarding, and enable an authenticator from **Account security**. Then run:
 
 ```powershell
 npm.cmd run admin:bootstrap -- their-registered-email
 ```
 
-The bootstrap tool refuses when an existing platform administrator is present. Subsequent assignments use the platform dashboard.
+The bootstrap tool refuses when an existing platform administrator is present or the target account has no verified authenticator. Subsequent assignments use the platform dashboard. Platform-wide reads require authenticator assurance, and role, suspension, organization, and platform-setting changes require a verification completed within the previous ten minutes.
 
 ## Storage and identity
 

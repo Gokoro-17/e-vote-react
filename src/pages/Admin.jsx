@@ -1212,6 +1212,16 @@ function Platform({ action }) {
   return (
     <div className="panel">
       <h3>Platform users</h3>
+      <div className="notice">
+        <ShieldCheck size={18} />
+        <span>
+          Platform access requires a verified authenticator. Re-verify before
+          changing roles or suspending accounts.{" "}
+          <Link to="/two-factor?next=%2Fworkspace%2Fplatform">
+            Verify authenticator
+          </Link>
+        </span>
+      </div>
       <Feedback error={users.error} />
       {users.data?.map((u) => (
         <div className="notification" key={u.id}>

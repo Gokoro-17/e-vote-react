@@ -9,7 +9,13 @@ import QRCode from "qrcode";
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 import path from "node:path";
-import { authenticate, requireUser, safeUser, mountAuth } from "./auth.js";
+import {
+  authenticate,
+  requireUser,
+  requirePlatformAdmin,
+  safeUser,
+  mountAuth,
+} from "./auth.js";
 import {
   configurationIssues,
   requireConfiguration,
@@ -116,6 +122,7 @@ async function access(
 ) {
   const u = requireUser(req);
   if (u.role === "SUPER_ADMIN") {
+    requirePlatformAdmin(req);
     req.securityOrganizationId = organizationId;
     return;
   }
@@ -149,7 +156,10 @@ async function visible(req: any, e: any) {
   if (e.organization.suspended && req.user?.role !== "SUPER_ADMIN")
     fail("This organization is currently unavailable.", 403);
   if (e.access === "PUBLIC" && e.status !== "DRAFT") return;
-  if (req.user?.role === "SUPER_ADMIN") return;
+  if (req.user?.role === "SUPER_ADMIN") {
+    requirePlatformAdmin(req);
+    return;
+  }
   const member = req.user
     ? await db.organizationMember.findUnique({
         where: {
@@ -737,6 +747,7 @@ app.get(
       .string()
       .max(40)
       .parse(req.query.status || "");
+    if (req.user?.role === "SUPER_ADMIN") requirePlatformAdmin(req);
     if (statusFilter && !Object.hasOwn(transitions, statusFilter))
       fail("Unknown election status.");
     const memberships = req.user
@@ -2102,6 +2113,7 @@ app.get(
   "/api/admin/dashboard",
   route(async (req, res) => {
     const u = requireUser(req);
+    if (u.role === "SUPER_ADMIN") requirePlatformAdmin(req);
     const page = z.coerce
       .number()
       .int()
@@ -2228,8 +2240,7 @@ app.get(
 app.post(
   "/api/admin/audit-integrity",
   route(async (req, res) => {
-    if (requireUser(req).role !== "SUPER_ADMIN")
-      fail("Platform administrator required.", 403);
+    requirePlatformAdmin(req, true);
     const rows = await db.auditLog.findMany({ orderBy: { id: "asc" } });
     let previousHash = "GENESIS",
       valid = true;
@@ -2263,8 +2274,7 @@ app.post(
     });
     if (!s) fail("Event not found.", 404);
     if (s!.organizationId) await access(req, s!.organizationId);
-    else if (requireUser(req).role !== "SUPER_ADMIN")
-      fail("Platform administrator required.", 403);
+    else requirePlatformAdmin(req);
     await db.securityEvent.update({
       where: { id: s!.id },
       data: { reviewed: true },
@@ -2280,8 +2290,7 @@ app.post(
 app.get(
   "/api/platform/users",
   route(async (req, res) => {
-    if (requireUser(req).role !== "SUPER_ADMIN")
-      fail("Platform administrator required.", 403);
+    requirePlatformAdmin(req);
     res.json(
       await db.user.findMany({
         select: {
@@ -2300,8 +2309,7 @@ app.get(
 app.get(
   "/api/platform/configuration",
   route(async (req, res) => {
-    if (requireUser(req).role !== "SUPER_ADMIN")
-      fail("Platform administrator required.", 403);
+    requirePlatformAdmin(req);
     res.json({
       identityProviderConfigured: !!process.env.IDENTITY_PROVIDER_URL,
       emailConfigured: !!process.env.SMTP_URL,
@@ -2316,8 +2324,8 @@ app.get(
 app.patch(
   "/api/platform/organizations/:id",
   route(async (req, res) => {
-    if (requireUser(req).role !== "SUPER_ADMIN")
-      fail("Platform administrator required.", 403);
+    const admin = requirePlatformAdmin(req, true),
+      organizationId = z.string().uuid().parse(req.params.id);
     const input = z
       .object({
         suspended: z.boolean().optional(),
@@ -2325,8 +2333,11 @@ app.patch(
         plan: z.enum(["FREE", "PRO", "BUSINESS", "ENTERPRISE"]).optional(),
       })
       .parse(req.body);
-    await db.organization.update({ where: { id: req.params.id }, data: input });
-    await logAudit(req.user.id, "PLATFORM_ORGANIZATION_UPDATED", req.params.id);
+    await db.organization.update({
+      where: { id: organizationId },
+      data: input,
+    });
+    await logAudit(admin.id, "PLATFORM_ORGANIZATION_UPDATED", organizationId);
     res.json({ ok: true });
   }),
 );
@@ -2379,18 +2390,28 @@ app.get(
 app.patch(
   "/api/platform/users/:id",
   route(async (req, res) => {
-    const u = requireUser(req);
-    if (u.role !== "SUPER_ADMIN") fail("Platform administrator required.", 403);
-    if (u.id === req.params.id)
-      fail("You cannot change your own platform access.");
+    const u = requirePlatformAdmin(req, true),
+      targetId = z.string().uuid().parse(req.params.id);
+    if (u.id === targetId) fail("You cannot change your own platform access.");
     const input = z
       .object({
         suspended: z.boolean().optional(),
         role: z.enum(["VOTER", "CANDIDATE", "SUPER_ADMIN"]).optional(),
       })
       .parse(req.body);
+    if (input.role === "SUPER_ADMIN") {
+      const { data, error } = await supabaseAdmin().auth.admin.mfa.listFactors({
+        userId: targetId,
+      });
+      if (error) fail("Unable to verify the target account's security.", 503);
+      if (!data?.factors.some((factor) => factor.status === "verified"))
+        fail(
+          "This user must enable an authenticator before receiving platform access.",
+        );
+    }
     await serializable(async (tx) => {
-      const target = await tx.user.findUnique({ where: { id: req.params.id } });
+      const target = await tx.user.findUnique({ where: { id: targetId } });
+      if (!target) fail("User not found.", 404);
       if (
         target?.role === "SUPER_ADMIN" &&
         (input.suspended || (input.role && input.role !== "SUPER_ADMIN")) &&
@@ -2399,9 +2420,9 @@ app.patch(
         })) <= 1
       )
         fail("Keep an active platform administrator.");
-      await tx.user.update({ where: { id: req.params.id }, data: input });
+      await tx.user.update({ where: { id: targetId }, data: input });
       if (input.suspended)
-        await tx.session.deleteMany({ where: { userId: req.params.id } });
+        await tx.session.deleteMany({ where: { userId: targetId } });
       await audit(
         u.id,
         "PLATFORM_USER_UPDATED",

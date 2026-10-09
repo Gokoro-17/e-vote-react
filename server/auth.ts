@@ -171,11 +171,16 @@ async function establish(req: any, res: Response) {
   req.session = session;
   req.auth = auth;
   const factors = await auth.client.auth.mfa.listFactors();
-  const needsMfa = Boolean(
-    factors.data?.totp?.some((f: any) => f.status === "verified") &&
-    auth.aal !== "aal2",
+  const hasVerifiedMfa = Boolean(
+    factors.data?.totp?.some((f: any) => f.status === "verified"),
   );
-  return { user: safeUser(user), csrf: session.csrf, needsMfa };
+  const needsMfa = hasVerifiedMfa && auth.aal !== "aal2";
+  return {
+    user: safeUser(user),
+    csrf: session.csrf,
+    needsMfa,
+    platformMfaSetupRequired: user.role === "SUPER_ADMIN" && !hasVerifiedMfa,
+  };
 }
 export async function authenticate(req: any, res: Response) {
   if (
@@ -198,10 +203,10 @@ export async function authenticate(req: any, res: Response) {
   req.user = session.user;
   const factors = await auth.client.auth.mfa.listFactors();
   if (factors.error) fail("Unable to verify account security. Try again.", 503);
-  req.needsMfa = Boolean(
-    factors.data?.totp?.some((f: any) => f.status === "verified") &&
-    auth.aal !== "aal2",
+  req.hasVerifiedMfa = Boolean(
+    factors.data?.totp?.some((f: any) => f.status === "verified"),
   );
+  req.needsMfa = req.hasVerifiedMfa && auth.aal !== "aal2";
 }
 export function requireUser(req: any, allowIncomplete = false) {
   if (!req.user) fail("Sign in to continue.", 401);
@@ -210,6 +215,31 @@ export function requireUser(req: any, allowIncomplete = false) {
   if (!allowIncomplete && req.needsMfa)
     fail("Verify your authenticator code to continue.", 403);
   return req.user;
+}
+
+export function requirePlatformAdmin(req: any, recent = false) {
+  const user = requireUser(req);
+  if (user.role !== "SUPER_ADMIN")
+    fail("Platform administrator required.", 403);
+  if (!req.hasVerifiedMfa)
+    fail(
+      "Set up an authenticator in Account security before using platform administration.",
+      403,
+    );
+  if (req.auth?.aal !== "aal2")
+    fail(
+      "Verify your authenticator before using platform administration.",
+      403,
+    );
+  if (
+    recent &&
+    req.session.reauthenticatedAt < new Date(Date.now() - 10 * 60000)
+  )
+    fail(
+      "Verify your authenticator again before changing platform access.",
+      403,
+    );
+  return user;
 }
 export function mountAuth(
   app: Express,
@@ -223,6 +253,9 @@ export function mountAuth(
         user: req.user ? safeUser(req.user) : null,
         csrf: req.session?.csrf || null,
         needsMfa: Boolean(req.needsMfa),
+        platformMfaSetupRequired: Boolean(
+          req.user?.role === "SUPER_ADMIN" && !req.hasVerifiedMfa,
+        ),
         configured: configurationIssues().length === 0,
       }),
     ),
@@ -652,15 +685,35 @@ export function mountAuth(
         code: input.code,
       });
       if (error) fail("Authenticator code is incorrect or expired.");
+      const csrf = token();
+      await db.session.update({
+        where: { id: req.session.id },
+        data: { csrf, reauthenticatedAt: new Date() },
+      });
       await logAudit(req.user.id, "MFA_VERIFIED");
-      res.json({ ok: true });
+      res.json({ ok: true, csrf });
     }),
   );
   app.delete(
     "/api/auth/mfa/:id",
     authLimit,
     route(async (req, res) => {
-      requireUser(req);
+      const user = requireUser(req);
+      if (user.role === "SUPER_ADMIN") {
+        const { data, error } = await req.auth.client.auth.mfa.listFactors();
+        if (error) fail("Unable to verify account security. Try again.", 503);
+        const verified =
+          data?.totp?.filter((factor: any) => factor.status === "verified") ||
+          [];
+        if (
+          verified.some((factor: any) => factor.id === req.params.id) &&
+          verified.length <= 1
+        )
+          fail(
+            "Platform administrators must keep at least one verified authenticator.",
+            403,
+          );
+      }
       const { error } = await req.auth.client.auth.mfa.unenroll({
         factorId: z.string().uuid().parse(req.params.id),
       });

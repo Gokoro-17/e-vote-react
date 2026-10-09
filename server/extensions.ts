@@ -8,7 +8,7 @@ import {
   token,
   serializable,
 } from "./platform.js";
-import { requireUser } from "./auth.js";
+import { requirePlatformAdmin, requireUser } from "./auth.js";
 import { supabaseAdmin } from "./supabase.js";
 import sharp from "sharp";
 
@@ -531,8 +531,7 @@ export function mountExtensions(app: Express, c: any) {
   app.get(
     "/api/platform/settings",
     route(async (req: any, res: any) => {
-      if (requireUser(req).role !== "SUPER_ADMIN")
-        fail("Platform administrator required.", 403);
+      requirePlatformAdmin(req);
       res.json(
         (await db.platformSettings.findUnique({
           where: { id: "platform" },
@@ -547,8 +546,7 @@ export function mountExtensions(app: Express, c: any) {
   app.patch(
     "/api/platform/settings",
     route(async (req: any, res: any) => {
-      if (requireUser(req).role !== "SUPER_ADMIN")
-        fail("Platform administrator required.", 403);
+      requirePlatformAdmin(req, true);
       const input = z
         .object({
           documentRetentionDays: z.number().int().min(1).max(90),

@@ -372,9 +372,16 @@ if (!configurationIssues().length) {
     >`SELECT t.tgenabled FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='evote' AND c.relname='VoterEligibility' AND t.tgname='eligibility_rules'`;
     assert.equal(triggers[0]?.tgenabled, "O");
   });
-  await check("Anonymous admin access denied", async () => {
-    const response = await request("/admin/dashboard");
-    assert.equal(response.status, 401);
+  await check("Anonymous and forged platform access denied", async () => {
+    const anonymous = await request("/admin/dashboard"),
+      forged = await request("/platform/users", {
+        headers: {
+          "x-user-id": "00000000-0000-4000-8000-000000000001",
+          "x-user-role": "SUPER_ADMIN",
+        },
+      });
+    assert.equal(anonymous.status, 401);
+    assert.equal(forged.status, 401);
   });
   await check("Private database tables have RLS enabled", async () => {
     const tables = await db.$queryRaw<

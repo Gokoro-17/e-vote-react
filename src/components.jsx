@@ -285,7 +285,7 @@ export function Badge({ value }) {
   );
 }
 export function RequireAccount({ children }) {
-  const { user, needsMfa, loading } = useStore(),
+  const { user, needsMfa, platformMfaSetupRequired, loading } = useStore(),
     location = useLocation(),
     next = location.pathname + location.search,
     returnQuery = "?next=" + encodeURIComponent(next);
@@ -311,6 +311,20 @@ export function RequireAccount({ children }) {
         <p>Enter the code from your authenticator to continue.</p>
         <Link className="btn" to={"/two-factor" + returnQuery}>
           Verify authenticator
+        </Link>
+      </div>
+    );
+  if (platformMfaSetupRequired && location.pathname.startsWith("/workspace"))
+    return (
+      <div className="pg narrow">
+        <ShieldCheck size={36} />
+        <h1>Protect platform administration</h1>
+        <p className="sub">
+          Super Admin accounts must enable an authenticator before viewing or
+          changing platform-wide data.
+        </p>
+        <Link className="btn" to="/account/security">
+          Set up authenticator <ArrowUpRight size={17} />
         </Link>
       </div>
     );

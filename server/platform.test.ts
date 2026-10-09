@@ -2,6 +2,7 @@ import "dotenv/config";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 const { encrypt, decrypt, identityFingerprint } = await import("./platform.js");
+const { requirePlatformAdmin } = await import("./auth.js");
 test("AES-GCM encrypts separately and rejects tampering", () => {
   const message = "Sensitive evidence and choice";
   const a = encrypt(message),
@@ -26,5 +27,34 @@ test("identity fingerprints are stable keyed pseudonyms", () => {
   assert.equal(
     identityFingerprint("provider-subject-1").includes("provider-subject"),
     false,
+  );
+});
+test("platform administration requires verified AAL2 authentication", () => {
+  const base = {
+    user: { id: "admin", role: "SUPER_ADMIN", consentAt: new Date() },
+    session: { reauthenticatedAt: new Date() },
+    auth: { aal: "aal2" },
+    hasVerifiedMfa: true,
+    needsMfa: false,
+  };
+  assert.equal(requirePlatformAdmin(base).id, "admin");
+  assert.throws(
+    () => requirePlatformAdmin({ ...base, hasVerifiedMfa: false }),
+    /Set up an authenticator/,
+  );
+  assert.throws(
+    () => requirePlatformAdmin({ ...base, auth: { aal: "aal1" } }),
+    /Verify your authenticator/,
+  );
+  assert.throws(
+    () =>
+      requirePlatformAdmin(
+        {
+          ...base,
+          session: { reauthenticatedAt: new Date(Date.now() - 11 * 60000) },
+        },
+        true,
+      ),
+    /again before changing platform access/,
   );
 });

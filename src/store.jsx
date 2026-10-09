@@ -44,6 +44,7 @@ export async function api(path, body, method = body ? "POST" : "GET") {
 export function StoreProvider({ children }) {
   const [user, setUser] = useState(null),
     [needsMfa, setMfa] = useState(false),
+    [platformMfaSetupRequired, setPlatformMfaSetupRequired] = useState(false),
     [configured, setConfigured] = useState(true),
     [loading, setLoading] = useState(true),
     [error, setError] = useState("");
@@ -52,6 +53,7 @@ export function StoreProvider({ children }) {
       const data = await api("/auth/session");
       setUser(data.user);
       setMfa(data.needsMfa);
+      setPlatformMfaSetupRequired(Boolean(data.platformMfaSetupRequired));
       setConfigured(data.configured);
       setError("");
       return data;
@@ -60,6 +62,7 @@ export function StoreProvider({ children }) {
       setError(e.message);
       setUser(null);
       setMfa(false);
+      setPlatformMfaSetupRequired(false);
     } finally {
       setLoading(false);
     }
@@ -71,6 +74,8 @@ export function StoreProvider({ children }) {
     const result = await api("/auth/" + path, data);
     if (Object.hasOwn(result, "user")) setUser(result.user);
     if (Object.hasOwn(result, "needsMfa")) setMfa(result.needsMfa);
+    if (Object.hasOwn(result, "platformMfaSetupRequired"))
+      setPlatformMfaSetupRequired(Boolean(result.platformMfaSetupRequired));
     return result;
   };
   const logout = async () => {
@@ -83,12 +88,14 @@ export function StoreProvider({ children }) {
     csrf = null;
     setUser(null);
     setMfa(false);
+    setPlatformMfaSetupRequired(false);
   };
   return (
     <Context.Provider
       value={{
         user,
         needsMfa,
+        platformMfaSetupRequired,
         configured,
         loading,
         error,
