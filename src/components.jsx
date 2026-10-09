@@ -8,6 +8,7 @@ import {
   ArrowUpRight,
   ShieldCheck,
   Upload,
+  X,
 } from "lucide-react";
 import { api, useStore } from "./store.jsx";
 export const status = (s) => s?.replaceAll("_", " ").toLowerCase();
@@ -30,18 +31,19 @@ export function useLoad(path) {
       setData(null);
       setLoading(false);
       setError("");
-      return;
+      return true;
     }
     setLoading(true);
     setError("");
     try {
       const result = await api(path);
       if (ticket === ref.current) setData(result);
+      return true;
     } catch (e) {
       if (ticket === ref.current) {
         setError(e.message);
-        setData(null);
       }
+      return false;
     } finally {
       if (ticket === ref.current) setLoading(false);
     }
@@ -71,6 +73,40 @@ export function Feedback({ error, message }) {
         </div>
       )}
     </>
+  );
+}
+export function Toast({ error, message, onClose }) {
+  const text = error || message,
+    [visible, setVisible] = useState(Boolean(text));
+  useEffect(() => {
+    if (!text) {
+      setVisible(false);
+      return;
+    }
+    setVisible(true);
+    const timer = window.setTimeout(
+      () => setVisible(false),
+      error ? 7000 : 4500,
+    );
+    return () => window.clearTimeout(timer);
+  }, [text, error]);
+  if (!text || !visible) return null;
+  const close = () => {
+    setVisible(false);
+    onClose?.();
+  };
+  return (
+    <div
+      className={`toast ${error ? "error" : "success"}`}
+      role={error ? "alert" : "status"}
+      aria-live={error ? "assertive" : "polite"}
+    >
+      {error ? <AlertCircle size={20} /> : <CheckCircle2 size={20} />}
+      <span>{text}</span>
+      <button type="button" onClick={close} aria-label="Close notification">
+        <X size={17} />
+      </button>
+    </div>
   );
 }
 export function Field({

@@ -3,7 +3,11 @@ import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { db } from "../server/platform.js";
-import { configurationIssues, projectRef } from "../server/supabase.js";
+import {
+  configurationIssues,
+  projectRef,
+  supabaseAuthUrl,
+} from "../server/supabase.js";
 const origin =
   process.env.LIVE_TEST_ORIGIN ||
   `http://127.0.0.1:${process.env.PORT || 3001}`;
@@ -210,7 +214,7 @@ await check("Selected Supabase project is configured", async () => {
 let providerSettings: any;
 await check("Live Supabase email confirmation", async () => {
   assert.equal(process.env.SUPABASE_URL, `https://${projectRef}.supabase.co`);
-  const response = await fetch(`${process.env.SUPABASE_URL}/auth/v1/settings`, {
+  const response = await fetch(`${supabaseAuthUrl}/auth/v1/settings`, {
     headers: { apikey: process.env.SUPABASE_PUBLISHABLE_KEY! },
     signal: AbortSignal.timeout(15000),
   });
@@ -228,7 +232,7 @@ await check("Live Supabase Google sign-in", async () => {
 await check(
   "Google OAuth web client and production fallback redirect are configured",
   async () => {
-    const authorize = new URL(process.env.SUPABASE_URL + "/auth/v1/authorize");
+    const authorize = new URL(supabaseAuthUrl + "/auth/v1/authorize");
     authorize.searchParams.set("provider", "google");
     authorize.searchParams.set(
       "redirect_to",
@@ -252,10 +256,10 @@ await check(
     );
     assert.equal(
       google.searchParams.get("redirect_uri"),
-      process.env.SUPABASE_URL + "/auth/v1/callback",
+      supabaseAuthUrl + "/auth/v1/callback",
     );
     if (origin.startsWith("https:")) {
-      const callback = new URL(process.env.SUPABASE_URL + "/auth/v1/callback");
+      const callback = new URL(supabaseAuthUrl + "/auth/v1/callback");
       callback.searchParams.set("state", google.searchParams.get("state")!);
       callback.searchParams.set("error", "access_denied");
       callback.searchParams.set(
@@ -282,7 +286,7 @@ await check(
 await check(
   "Authoritative Supabase user endpoint requires authentication",
   async () => {
-    const response = await fetch(process.env.SUPABASE_URL + "/auth/v1/user", {
+    const response = await fetch(supabaseAuthUrl + "/auth/v1/user", {
       headers: { apikey: process.env.SUPABASE_PUBLISHABLE_KEY! },
       signal: AbortSignal.timeout(15000),
     });

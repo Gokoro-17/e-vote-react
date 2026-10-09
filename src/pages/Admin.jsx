@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -18,6 +18,8 @@ import {
   Trash2,
   CheckCircle2,
   CircleAlert,
+  ChevronDown,
+  LoaderCircle,
 } from "lucide-react";
 import CreateElection from "./CreateElection.jsx";
 import Billing from "./Billing.jsx";
@@ -41,6 +43,7 @@ import {
   status,
   Empty,
   ImageUpload,
+  Toast,
 } from "../components.jsx";
 const next = {
   REGISTRATION_OPEN: "VOTING_UPCOMING",
@@ -200,19 +203,31 @@ export default function Admin() {
     [selected, setSelected] = useState(""),
     [orgId, setOrg] = useState(""),
     [error, setError] = useState(""),
-    [message, setMessage] = useState("");
+    [message, setMessage] = useState(""),
+    [refreshing, setRefreshing] = useState(false);
   const d = dashboard.data,
     e = d?.elections.find((e) => e.id === selected) || d?.elections[0],
     org = orgId || d?.organizations[0]?.id,
     workflow = e ? electionWorkflow(e) : null;
   const reload = () => dashboard.load();
+  const refreshWorkspace = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    setError("");
+    setMessage("");
+    const refreshed = await reload();
+    if (refreshed) setMessage("Workspace refreshed.");
+    setRefreshing(false);
+  };
   const action = async (fn, success = "Action completed.") => {
     try {
       setError("");
+      setMessage("");
       await fn();
       setMessage(success);
-      reload();
+      await reload();
     } catch (err) {
+      setMessage("");
       setError(err.message);
     }
   };
@@ -220,6 +235,18 @@ export default function Admin() {
     await api(path, data, method);
     await reload();
   };
+  useEffect(() => {
+    setError("");
+    setMessage("");
+  }, [slug]);
+  useEffect(() => {
+    if (
+      user &&
+      user.role !== "SUPER_ADMIN" &&
+      ["Audit Logs", "Security", "Platform"].includes(tab)
+    )
+      go("/workspace/overview", { replace: true });
+  }, [go, tab, user]);
   if (!user)
     return (
       <div className="pg">
@@ -244,9 +271,9 @@ export default function Admin() {
     "Settings",
     "Verification",
     "Analytics",
-    "Audit Logs",
-    "Security",
-    ...(user.role === "SUPER_ADMIN" ? ["Platform"] : []),
+    ...(user.role === "SUPER_ADMIN"
+      ? ["Audit Logs", "Security", "Platform"]
+      : []),
   ];
   return (
     <div className="pg workspace">
@@ -265,7 +292,40 @@ export default function Admin() {
             ? "Create organization"
             : "New election"}
         </Link>
-        <nav aria-label="Workspace sections">
+        <details className="workspace-mobile-nav">
+          <summary>
+            <span>
+              <WorkspaceIcon tab={tab} />
+              <span>
+                <small>Workspace</small>
+                <b>{tab}</b>
+              </span>
+            </span>
+            <ChevronDown size={18} />
+          </summary>
+          <div className="workspace-mobile-links">
+            {[...mainTabs, ...advancedTabs].map((t) => (
+              <NavLink
+                key={t}
+                to={
+                  t === "Home"
+                    ? "/workspace/overview"
+                    : "/workspace/" + t.toLowerCase().replaceAll(" ", "-")
+                }
+                className={t === tab ? "selected" : ""}
+                onClick={(event) =>
+                  event.currentTarget
+                    .closest("details")
+                    ?.removeAttribute("open")
+                }
+              >
+                <WorkspaceIcon tab={t} />
+                {t}
+              </NavLink>
+            ))}
+          </div>
+        </details>
+        <nav className="workspace-desktop-nav" aria-label="Workspace sections">
           {mainTabs.map((t) => (
             <NavLink
               key={t}
@@ -306,11 +366,24 @@ export default function Admin() {
               {tab === "Home" ? `Welcome, ${user.name.split(" ")[0]}.` : tab}
             </h2>
           </div>
-          <button className="btn alt" onClick={reload}>
-            Refresh
+          <button
+            className="btn alt"
+            onClick={refreshWorkspace}
+            disabled={refreshing}
+            aria-busy={refreshing}
+          >
+            {refreshing && <LoaderCircle className="spin" size={16} />}
+            {refreshing ? "Refreshing…" : "Refresh"}
           </button>
         </div>
-        <Feedback error={error || dashboard.error} message={message} />
+        <Toast
+          error={error || dashboard.error}
+          message={message}
+          onClose={() => {
+            setError("");
+            setMessage("");
+          }}
+        />
         {dashboard.loading && !d && <p>Loading workspace…</p>}
         {d && (
           <>
@@ -366,7 +439,7 @@ export default function Admin() {
                     ["Your elections", d.elections.length],
                     ["Registrations", d.stats.registered],
                     ["Ballots cast", d.stats.votes],
-                    ["Review alerts", d.stats.alerts],
+                    ["Active now", d.stats.active],
                   ].map(([label, n]) => (
                     <div className="panel" key={label}>
                       <b>{n}</b>
@@ -482,6 +555,7 @@ export default function Admin() {
                             "Election link copied. Share it with voters.",
                           );
                         } catch {
+                          setMessage("");
                           setError(
                             "Copy the public election URL from the Public page.",
                           );
@@ -569,7 +643,10 @@ export default function Admin() {
                     canAdmin(e.organizationId) && (
                       <button
                         className="btn"
-                        disabled={workflow.kind === "waiting"}
+                        disabled={
+                          workflow.kind === "waiting" ||
+                          (workflow.kind === "refresh" && refreshing)
+                        }
                         onClick={() => {
                           if (workflow.kind === "candidates") {
                             setTab("Candidates");
@@ -592,7 +669,7 @@ export default function Admin() {
                             return;
                           }
                           if (workflow.kind === "refresh") {
-                            reload();
+                            refreshWorkspace();
                             return;
                           }
                           if (
@@ -620,7 +697,12 @@ export default function Admin() {
                           );
                         }}
                       >
-                        {workflow.label}
+                        {workflow.kind === "refresh" && refreshing && (
+                          <LoaderCircle className="spin" size={16} />
+                        )}
+                        {workflow.kind === "refresh" && refreshing
+                          ? "Refreshing…"
+                          : workflow.label}
                       </button>
                     )}
                 </div>

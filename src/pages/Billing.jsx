@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowUpRight, CreditCard, ShieldCheck } from "lucide-react";
+import {
+  ArrowUpRight,
+  CreditCard,
+  ShieldCheck,
+  LoaderCircle,
+} from "lucide-react";
 import { api } from "../store.jsx";
-import { date, Empty, Feedback, Field, useLoad } from "../components.jsx";
+import { date, Empty, Toast, Field, useLoad } from "../components.jsx";
 import { PlanCards, money } from "./Pricing.jsx";
 import { planById, planRank } from "../../shared/plans.ts";
 
@@ -102,13 +107,26 @@ export default function Billing({ organizations }) {
           ))}
         </select>
       </Field>
-      <Feedback error={error || billing.error} message={message} />
+      <Toast
+        error={error || billing.error}
+        message={message}
+        onClose={() => {
+          setError("");
+          setMessage("");
+        }}
+      />
       <button
         className="btn alt"
         disabled={busy || billing.loading}
-        onClick={billing.load}
+        aria-busy={billing.loading}
+        onClick={async () => {
+          setError("");
+          setMessage("");
+          if (await billing.load()) setMessage("Billing refreshed.");
+        }}
       >
-        Refresh billing
+        {billing.loading && <LoaderCircle className="spin" size={16} />}
+        {billing.loading ? "Refreshing…" : "Refresh billing"}
       </button>
       {billing.loading && !data && <p>Loading your plan…</p>}
       {data && (

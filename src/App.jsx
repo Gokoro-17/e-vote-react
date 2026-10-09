@@ -45,7 +45,7 @@ import Admin from "./pages/Admin.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Pricing from "./pages/Pricing.jsx";
 import { Information, Contact } from "./pages/Information.jsx";
-import { RequireAccount, Feedback, useLoad } from "./components.jsx";
+import { RequireAccount, Toast, useLoad } from "./components.jsx";
 const isStandalone = () =>
   window.matchMedia("(display-mode: standalone)").matches ||
   window.navigator.standalone === true;
@@ -183,11 +183,7 @@ export default function App() {
           </nav>
         </div>
       </header>
-      {error && (
-        <div className="wrap">
-          <Feedback error={error} />
-        </div>
-      )}
+      <Toast error={error} onClose={() => setError("")} />
       {configuration.data?.welcomeMessage && (
         <div className="site-announcement">
           <div className="wrap">{configuration.data.welcomeMessage}</div>

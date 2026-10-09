@@ -295,8 +295,14 @@ select:focus-visible {
   text-align: center;
   transition:
     background 0.16s,
-    border-color 0.16s;
+    border-color 0.16s,
+    transform 0.08s,
+    opacity 0.08s;
   max-width: 100%;
+}
+.btn:not(:disabled):active {
+  transform: scale(0.985);
+  opacity: 0.9;
 }
 .btn:hover {
   background: var(--primary-hover);
@@ -1194,6 +1200,59 @@ input[type="file"]::file-selector-button {
 }
 .feedback span {
   min-width: 0;
+}
+.toast {
+  position: fixed;
+  top: calc(96px + var(--app-safe-top));
+  right: max(20px, var(--app-safe-right));
+  z-index: 120;
+  width: min(390px, calc(100vw - 40px));
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 11px;
+  padding: 15px 14px;
+  border: 1px solid;
+  border-radius: 6px;
+  box-shadow: 0 18px 48px #00000066;
+  font-size: 12px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+  animation: toast-in 180ms ease-out;
+}
+.toast.error {
+  color: #f6c2bb;
+  background: #382832;
+  border-color: #8a5d67;
+}
+.toast.success {
+  color: #d9efd5;
+  background: #173b29;
+  border-color: #64866b;
+}
+.toast > svg {
+  margin-top: 1px;
+}
+.toast > button {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  margin: -7px -7px -7px 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: currentColor;
+}
+.toast > button:hover {
+  background: #ffffff12;
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
 }
 .notice {
   font-size: 12px;
@@ -2580,6 +2639,83 @@ dd {
 .workspace-more[open] > summary {
   color: var(--ink);
 }
+.workspace-mobile-nav {
+  display: none;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--paper);
+}
+.workspace-mobile-nav > summary {
+  min-height: 62px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 10px 14px;
+  cursor: pointer;
+  list-style: none;
+}
+.workspace-mobile-nav > summary::-webkit-details-marker {
+  display: none;
+}
+.workspace-mobile-nav > summary > span {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.workspace-mobile-nav > summary > span > svg {
+  color: var(--primary);
+}
+.workspace-mobile-nav > summary span span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.workspace-mobile-nav > summary small {
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.workspace-mobile-nav > summary b {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspace-mobile-nav > summary > svg {
+  transition: transform 160ms ease;
+}
+.workspace-mobile-nav[open] > summary > svg {
+  transform: rotate(180deg);
+}
+.workspace-mobile-links {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  padding: 8px 10px 11px;
+  border-top: 1px solid var(--line);
+}
+.workspace-mobile-links a {
+  min-width: 0;
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px;
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  text-decoration: none;
+}
+.workspace-mobile-links a.selected {
+  background: var(--soft);
+  color: var(--primary);
+  font-weight: 600;
+}
 .sidebar-note {
   color: var(--muted);
   font-size: 11px;
@@ -3153,6 +3289,12 @@ dd {
     gap: 7px;
     scrollbar-width: thin;
   }
+  .workspace-sidebar .workspace-desktop-nav {
+    display: none;
+  }
+  .workspace-mobile-nav {
+    display: block;
+  }
   .workspace-sidebar nav a {
     white-space: nowrap;
     padding: 10px 12px;
@@ -3201,6 +3343,14 @@ dd {
   }
 }
 @media (max-width: 760px) {
+  .toast {
+    top: auto;
+    right: max(16px, var(--app-safe-right));
+    bottom: calc(16px + var(--app-safe-bottom));
+    left: max(16px, var(--app-safe-left));
+    width: auto;
+    animation-name: toast-in-mobile;
+  }
   .wrap,
   .workspace-main {
     width: calc(100% - 40px);
@@ -3649,6 +3799,12 @@ dd {
   }
   .reading > p {
     font-size: 13px;
+  }
+}
+@keyframes toast-in-mobile {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
   }
 }
 @media (max-width: 480px) {

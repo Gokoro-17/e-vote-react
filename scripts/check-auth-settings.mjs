@@ -4,7 +4,8 @@ try {
   const base = process.env.SUPABASE_URL;
   if (base !== "https://mdtymdvybaurguflwktt.supabase.co")
     throw new Error("Unexpected project target.");
-  const r = await fetch(base + "/auth/v1/settings", {
+  const authBase = process.env.SUPABASE_AUTH_URL || base;
+  const r = await fetch(authBase + "/auth/v1/settings", {
     headers: { apikey: process.env.SUPABASE_PUBLISHABLE_KEY },
     signal: AbortSignal.timeout(15000),
   });

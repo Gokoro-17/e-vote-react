@@ -5,6 +5,8 @@ import type { Request, Response } from "express";
 
 export const projectRef = "mdtymdvybaurguflwktt";
 export const appOrigin = process.env.APP_ORIGIN || "http://localhost:5174";
+export const supabaseAuthUrl =
+  process.env.SUPABASE_AUTH_URL || process.env.SUPABASE_URL || "";
 const production = process.env.NODE_ENV === "production";
 export const authConfigured = () =>
   Boolean(
@@ -17,16 +19,13 @@ let providerCache:
   | undefined;
 export async function authAvailability() {
   if (providerCache && providerCache.expires > Date.now()) return providerCache;
-  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_PUBLISHABLE_KEY)
+  if (!supabaseAuthUrl || !process.env.SUPABASE_PUBLISHABLE_KEY)
     return { emailConfirmation: false, googleEnabled: false };
   try {
-    const response = await fetch(
-      `${process.env.SUPABASE_URL}/auth/v1/settings`,
-      {
-        headers: { apikey: process.env.SUPABASE_PUBLISHABLE_KEY },
-        signal: AbortSignal.timeout(10000),
-      },
-    );
+    const response = await fetch(`${supabaseAuthUrl}/auth/v1/settings`, {
+      headers: { apikey: process.env.SUPABASE_PUBLISHABLE_KEY },
+      signal: AbortSignal.timeout(10000),
+    });
     if (!response.ok) throw new Error("Provider unavailable");
     const settings = (await response.json()) as any;
     providerCache = {
@@ -88,6 +87,20 @@ export function configurationIssues() {
     process.env.SUPABASE_URL !== `https://${projectRef}.supabase.co`
   )
     issues.push("SUPABASE_URL must target the selected project");
+  if (process.env.SUPABASE_AUTH_URL) {
+    try {
+      const authUrl = new URL(process.env.SUPABASE_AUTH_URL);
+      if (
+        authUrl.protocol !== "https:" ||
+        authUrl.origin !== process.env.SUPABASE_AUTH_URL ||
+        authUrl.username ||
+        authUrl.password
+      )
+        issues.push("SUPABASE_AUTH_URL must be an exact HTTPS origin");
+    } catch {
+      issues.push("SUPABASE_AUTH_URL is invalid");
+    }
+  }
   if (process.env.DATABASE_URL) {
     try {
       const connection = new URL(process.env.DATABASE_URL);
@@ -123,7 +136,7 @@ export function requireConfiguration() {
 export function supabaseForRequest(req: Request, res: Response) {
   requireConfiguration();
   return createServerClient(
-    process.env.SUPABASE_URL!,
+    supabaseAuthUrl,
     process.env.SUPABASE_PUBLISHABLE_KEY!,
     {
       cookieOptions: {
